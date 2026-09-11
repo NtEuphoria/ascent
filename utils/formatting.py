@@ -3,6 +3,17 @@ from __future__ import annotations
 
 import math
 
+# Display preference, set once per run from the user's settings. Process-wide
+# rather than threaded through every call site: this is a desktop app with one
+# session, and passing a formatting flag through twenty signatures would buy
+# nothing. A multi-user deployment would need it per session.
+_USE_THOUSANDS = True
+
+
+def set_thousands_separator(enabled: bool) -> None:
+    global _USE_THOUSANDS
+    _USE_THOUSANDS = bool(enabled)
+
 
 def format_number(value: float, sig: int = 4) -> str:
     """Format a number to at least `sig` significant digits.
@@ -31,7 +42,8 @@ def format_number(value: float, sig: int = 4) -> str:
 
     decimals = sig - 1 - int(math.floor(math.log10(magnitude)))
     decimals = min(max(decimals, 0), 6)
-    text = f"{value:,.{decimals}f}"
+    text = (f"{value:,.{decimals}f}" if _USE_THOUSANDS
+            else f"{value:.{decimals}f}")
     if "." in text:
         text = text.rstrip("0").rstrip(".")
     return text

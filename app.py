@@ -20,6 +20,7 @@ from utils import settings as user_settings
 from utils import ui
 from utils.spec import normalise
 
+VERSION = "1.1.0"
 TITLE = "ASCENT"
 ACRONYM = "Aerospace · Structures · Controls · Electronics · Numerics · Toolkit"
 SUBTITLE = ("Interactive engineering calculators for aerospace, robotics, "
@@ -54,6 +55,26 @@ def all_calculators():
             for calc in normalise(entry, category)]
 
 
+def _quick_links(heading: str, slugs, by_slug, key_prefix: str) -> None:
+    """A short list of one-click jumps at the top of the sidebar.
+
+    Favourites and recents are the two shortcuts that stop a growing catalogue
+    from making the common case slower - which is the whole risk of adding
+    calculators.
+    """
+    entries = [by_slug[slug] for slug in slugs if slug in by_slug]
+    if not entries:
+        return
+    st.markdown(f'<div class="a-sidebar-heading">{heading}</div>',
+                unsafe_allow_html=True)
+    for category, calc in entries[:6]:
+        if st.button(calc.name, key=f"{key_prefix}::{calc.slug}",
+                     use_container_width=True, help=category):
+            st.session_state["nav_category"] = category
+            st.session_state[f"nav_equation::{category}"] = calc.name
+            st.rerun()
+
+
 def main() -> None:
     st.set_page_config(
         page_title=f"{TITLE} - Engineering Toolkit",
@@ -65,6 +86,19 @@ def main() -> None:
     ui.inject_css(prefs)
 
     catalogue = all_calculators()
+    by_slug = {calc.slug: (category, calc) for category, calc in catalogue}
+
+    # Restore the last calculator on the first run of a session, before the
+    # navigation widgets are built - which is the only point at which their
+    # session-state keys can still be set.
+    if "nav_restored" not in st.session_state:
+        st.session_state["nav_restored"] = True
+        last = prefs.get("last_page", "")
+        if prefs.get("start_page") == "Where I left off" and last in by_slug:
+            category, calc = by_slug[last]
+            st.session_state["nav_category"] = category
+            st.session_state[f"nav_equation::{category}"] = calc.name
+
     palette.trigger(catalogue)          # hidden; the Cmd-K menu item clicks it
 
     with st.sidebar:
@@ -73,6 +107,12 @@ def main() -> None:
                      help="Or press Cmd-K"):
             palette.request_open()
             st.rerun()
+
+        _quick_links("Favourites", prefs.get("favourites", []), by_slug, "fav")
+        _quick_links("Recent", [slug for slug in prefs.get("recents", [])
+                                if slug not in prefs.get("favourites", [])],
+                     by_slug, "rec")
+
         st.markdown("### Categories")
         category = st.selectbox("Category", list(CATEGORIES.keys()),
                                 key="nav_category", label_visibility="collapsed")
@@ -92,10 +132,12 @@ def main() -> None:
             user_settings.request_open()
             st.rerun()
 
-    user_settings.panel()
+    user_settings.panel(len(catalogue), len(CATEGORIES), VERSION)
 
     ui.app_header(TITLE, ACRONYM, SUBTITLE)
-    renderer.render(by_name[name], prefs)
+    chosen = by_name[name]
+    user_settings.record_visit(chosen.slug)
+    renderer.render(chosen, prefs)
 
 
 main()

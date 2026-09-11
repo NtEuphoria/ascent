@@ -217,3 +217,89 @@ def test_matplotlib_plots_are_mode_neutral():
     from utils import plotting
     assert plotting.FACE == "none"
     assert plotting.INK == plotting.MUTED
+
+
+# --------------------------------------------------------------------------
+# Expanded settings
+# --------------------------------------------------------------------------
+def test_every_accent_defines_both_modes():
+    """A colour legible on white is rarely legible on near-black."""
+    from utils import theme
+    for name, modes in theme.ACCENTS.items():
+        assert set(modes) == {"light", "dark"}, name
+        for mode, values in modes.items():
+            assert len(values) == 4, f"{name}/{mode} needs 4 accent tokens"
+            assert values[0] != modes["dark" if mode == "light" else "light"][0], \
+                f"{name} uses the same hex in both modes"
+
+
+def test_accent_choice_changes_the_emitted_tokens():
+    from utils import theme
+    blue = theme._tokens("Light", "Full", "Blue", "Comfortable")
+    amber = theme._tokens("Light", "Full", "Amber", "Comfortable")
+    assert blue != amber
+    assert "#1f4e79" in blue and "#8a5a00" in amber
+
+
+def test_compact_density_only_touches_spacing_and_type():
+    """Density must never shrink hit targets, only rhythm."""
+    from utils import theme
+    compact = set(theme.DENSITY["Compact"])
+    assert compact <= set(theme.SCALE), "compact introduces unknown tokens"
+    assert all(key.startswith(("s", "t-")) for key in compact)
+    assert not any(key.startswith("r-") for key in compact)   # radii untouched
+
+
+def test_invalid_accent_and_density_fall_back(settings_file):
+    settings.save({"accent": "Neon", "density": "Enormous"})
+    loaded = settings.load()
+    assert loaded["accent"] == "Blue"
+    assert loaded["density"] == "Comfortable"
+
+
+def test_favourites_toggle_and_persist(settings_file):
+    assert settings.toggle_favourite("aero.lift") is True
+    assert settings.load()["favourites"] == ["aero.lift"]
+    assert settings.toggle_favourite("aero.lift") is False
+    assert settings.load()["favourites"] == []
+
+
+def test_recents_are_most_recent_first_and_capped(settings_file):
+    for slug in ("a.one", "b.two", "c.three", "d.four", "e.five", "f.six",
+                 "g.seven", "h.eight"):
+        settings.record_visit(slug)
+    recents = settings.load()["recents"]
+    assert recents[0] == "h.eight"
+    assert len(recents) <= settings.MAX_RECENTS
+    assert len(recents) == len(set(recents))
+
+
+def test_revisiting_moves_a_calculator_to_the_front(settings_file):
+    settings.record_visit("a.one")
+    settings.record_visit("b.two")
+    settings.record_visit("a.one")
+    assert settings.load()["recents"][0] == "a.one"
+
+
+def test_reset_keeps_favourites(settings_file):
+    settings.toggle_favourite("aero.lift")
+    settings.update(accent="Amber", density="Compact")
+    settings.reset()
+    loaded = settings.load()
+    assert loaded["accent"] == "Blue"
+    assert loaded["favourites"] == ["aero.lift"], "favourites are user data"
+
+
+def test_corrupt_favourites_do_not_break_loading(settings_file):
+    settings_file.write_text(json.dumps({"favourites": [1, None, "ok", "ok"]}),
+                             encoding="utf-8")
+    assert settings.load()["favourites"] == ["ok"]
+
+
+def test_thousands_separator_setting():
+    from utils.formatting import format_number, set_thousands_separator
+    set_thousands_separator(True)
+    assert format_number(12403.125) == "12,403"
+    set_thousands_separator(False)
+    assert format_number(12403.125) == "12403"
+    set_thousands_separator(True)          # restore for other tests

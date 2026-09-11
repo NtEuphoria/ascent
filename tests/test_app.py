@@ -70,8 +70,20 @@ def test_graphs_render(category):
                 assert not at.exception, f"graph for {category} / {name} raised"
 
 
+def _open_lift():
+    """Open Aerodynamics / Lift explicitly.
+
+    The app can be set to reopen wherever you left off, so a test must never
+    assume which page it lands on.
+    """
+    at = _fresh_app()
+    at.sidebar.selectbox[0].set_value("Aerodynamics").run()
+    at.sidebar.radio[0].set_value("Lift").run()
+    return at
+
+
 def test_reset_button_restores_defaults():
-    at = _fresh_app()          # opens on Aerodynamics / Lift
+    at = _open_lift()
     velocity = at.number_input(key="aero_lift_v")
     assert velocity.value == pytest.approx(50.0)
 
@@ -84,7 +96,7 @@ def test_reset_button_restores_defaults():
 
 def test_invalid_input_shows_message_not_a_number():
     """A zero wing area must produce an error message, never a bogus result."""
-    at = _fresh_app()
+    at = _open_lift()
     at.number_input(key="aero_lift_s").set_value(0.0).run()
     assert not at.exception
     assert at.error, "expected a validation message for zero wing area"

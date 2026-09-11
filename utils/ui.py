@@ -19,7 +19,7 @@ import math
 import streamlit as st
 
 from . import theme
-from .formatting import format_number
+from .formatting import format_number, set_thousands_separator
 from .validation import ValidationError
 
 DISCLAIMER = (
@@ -30,8 +30,11 @@ DISCLAIMER = (
 def inject_css(prefs=None) -> None:
     """Called once per rerun from app.py. Styling lives in utils/theme.py."""
     prefs = prefs or {}
+    set_thousands_separator(prefs.get("thousands_separator", True))
     theme.inject(prefs.get("appearance", "Follow system"),
-                 prefs.get("motion", "Full"))
+                 prefs.get("motion", "Full"),
+                 prefs.get("accent", "Blue"),
+                 prefs.get("density", "Comfortable"))
 
 
 def app_header(title: str, acronym: str, subtitle: str) -> None:
@@ -58,15 +61,27 @@ def reset_button(prefix: str) -> None:
         st.rerun()
 
 
-def page_header(title: str, latex: str, explanation: str, prefix: str) -> None:
-    left, right = st.columns([6, 1], vertical_alignment="center")
+def page_header(title: str, latex: str, explanation: str, prefix: str,
+                favourite: bool = False) -> bool:
+    """Draw the page header. Returns True if the favourite star was clicked."""
+    left, star, right = st.columns([6, 0.8, 1.2], vertical_alignment="center")
     with left:
-        st.markdown(f'<div class="a-calc-title">{title}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="a-calc-title">{title}</div>',
+                    unsafe_allow_html=True)
+    with star:
+        starred = st.button(
+            "★" if favourite else "☆", key=f"fav::{prefix}",
+            help="Remove from favourites" if favourite
+            else "Add to favourites - pins it to the top of the sidebar",
+            use_container_width=True)
     with right:
         reset_button(prefix)
     st.latex(latex)
     st.markdown(f'<div class="a-note">{explanation}</div>', unsafe_allow_html=True)
-    st.markdown('<div class="a-eyebrow">Inputs</div>', unsafe_allow_html=True)
+    # No "Inputs" heading: a row of labelled fields needs no announcing, and
+    # one less label per page is one less thing between the user and the work.
+    st.write("")
+    return starred
 
 
 # --------------------------------------------------------------------------
@@ -170,7 +185,7 @@ def error(exc: Exception) -> None:
 
 def assumptions(items) -> None:
     """Stated directly under the result - never hidden behind a click."""
-    st.markdown('<div class="a-eyebrow">Assumptions</div>', unsafe_allow_html=True)
+    st.markdown('<div class="a-label">Assumptions</div>', unsafe_allow_html=True)
     bullets = "".join(f"<li>{item}</li>" for item in items)
     st.markdown(f'<ul class="a-tight">{bullets}</ul>', unsafe_allow_html=True)
 
@@ -179,17 +194,25 @@ def graph_toggle(prefix: str, label: str = "Show graph") -> bool:
     return st.checkbox(label, key=f"{prefix}_graph")
 
 
-def reference(variables, example: str) -> None:
+def reference(variables, example: str, show_example: bool = True) -> None:
     """Variable definitions and a real-world use, at the bottom of every page."""
     st.divider()
+    if not show_example:
+        st.markdown('<div class="a-label">Variables</div>',
+                    unsafe_allow_html=True)
+        rows = ["| Symbol | Meaning | Unit |", "| --- | --- | --- |"]
+        rows += [f"| {sym} | {meaning} | {unit} |"
+                 for sym, meaning, unit in variables]
+        st.markdown("\n".join(rows))
+        return
     left, right = st.columns([1.15, 1])
     with left:
-        st.markdown('<div class="a-eyebrow">Variables</div>', unsafe_allow_html=True)
+        st.markdown('<div class="a-label">Variables</div>', unsafe_allow_html=True)
         rows = ["| Symbol | Meaning | Unit |", "| --- | --- | --- |"]
         rows += [f"| {sym} | {meaning} | {unit} |" for sym, meaning, unit in variables]
         st.markdown("\n".join(rows))
     with right:
-        st.markdown('<div class="a-eyebrow">Where this is used</div>',
+        st.markdown('<div class="a-label">Where this is used</div>',
                     unsafe_allow_html=True)
         st.markdown(f'<div class="a-note">{example}</div>', unsafe_allow_html=True)
 

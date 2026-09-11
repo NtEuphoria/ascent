@@ -23,7 +23,8 @@ from typing import Any, Dict, List
 import numpy as np
 import streamlit as st
 
-from . import charts, ui
+from . import charts, settings, ui
+from .formatting import format_number
 from .spec import Calculator, Field, Inputs
 from .validation import ValidationError
 
@@ -137,6 +138,33 @@ def _draw_graph(calc: Calculator, values: Inputs, result: float,
     )
 
 
+def _copy_block(calc: Calculator, values: Inputs, result: float,
+                secondary, significant: int) -> None:
+    """A plain-text summary of the calculation, ready to paste.
+
+    Streamlit has no clipboard API, but `st.code` renders with a copy button -
+    so the honest way to offer "copy this result" is to show exactly the text
+    that will be copied.
+    """
+    lines = [f"{calc.name}"]
+    for field in calc.inputs:
+        raw = values.as_dict().get(field.key)
+        if isinstance(raw, (int, float)):
+            unit = f" {field.unit}" if field.unit else ""
+            lines.append(f"  {field.label} = {format_number(raw, 6)}{unit}")
+        elif raw is not None:
+            lines.append(f"  {field.label} = {raw}")
+    lines.append(f"{calc.result.label} = "
+                 f"{format_number(result, significant)} {calc.result.unit}")
+    for label, value, unit in secondary:
+        lines.append(f"  {label} = {format_number(value, significant)} {unit}")
+    lines.append("")
+    lines.append("Computed with ASCENT - verify critical designs independently.")
+
+    with st.popover("Copy this calculation", use_container_width=False):
+        st.code("\n".join(lines), language=None)
+
+
 def render(calc: Calculator, prefs=None) -> None:
     """Draw a complete calculator page."""
     if calc.render is not None:          # imperative escape hatch
@@ -146,7 +174,12 @@ def render(calc: Calculator, prefs=None) -> None:
 
     # The header is outside the fragment: it is static for a given calculator,
     # and Reset deliberately triggers a full rerun so every widget rebuilds.
-    ui.page_header(calc.name, calc.latex, calc.explanation, calc.prefix)
+    starred = ui.page_header(calc.name, calc.latex, calc.explanation,
+                             calc.prefix,
+                             favourite=calc.slug in prefs.get("favourites", []))
+    if starred:
+        settings.toggle_favourite(calc.slug)
+        st.rerun()
     _render_body(calc, prefs)
 
 
@@ -192,6 +225,7 @@ def _render_body(calc: Calculator, prefs: dict) -> None:
             caption = calc.note(values, result)
             if caption:
                 note_slot.caption(caption)
+        _copy_block(calc, values, result, secondary, significant)
 
     ui.assumptions(calc.assumptions)
 
@@ -201,4 +235,5 @@ def _render_body(calc: Calculator, prefs: dict) -> None:
                         prefs.get("appearance", "Follow system"))
 
     if prefs.get("show_reference", True):
-        ui.reference(calc.variables, calc.example)
+        ui.reference(calc.variables, calc.example,
+                     show_example=prefs.get("show_examples", True))

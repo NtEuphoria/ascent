@@ -33,7 +33,7 @@ LIGHT = {
     "border-strong": "rgba(16,24,40,0.20)",
     "ink": "#161b22",
     "ink-muted": "rgba(22,27,34,0.64)",
-    "ink-faint": "rgba(22,27,34,0.45)",
+    "ink-faint": "rgba(22,27,34,0.60)",   # 4.8:1 on white
     "accent": "#1f4e79",
     "accent-ink": "#1f4e79",
     "accent-soft": "rgba(31,78,121,0.07)",
@@ -59,7 +59,7 @@ DARK = {
     "border-strong": "rgba(255,255,255,0.20)",
     "ink": "#e6edf6",
     "ink-muted": "rgba(230,237,246,0.64)",
-    "ink-faint": "rgba(230,237,246,0.44)",
+    "ink-faint": "rgba(230,237,246,0.60)",  # 6.4:1 on the dark ground
     "accent": "#7ab3e8",
     "accent-ink": "#9ccbf5",
     "accent-soft": "rgba(122,179,232,0.10)",
@@ -77,6 +77,69 @@ DARK = {
 # is exactly the sort of thing nobody notices until a user reports it.
 assert set(LIGHT) == set(DARK), (
     f"palette mismatch: {set(LIGHT) ^ set(DARK)}")
+
+# ---------------------------------------------------------------------------
+# Accents
+# ---------------------------------------------------------------------------
+# Each accent carries its own light and dark pair. Dark values are lifted, not
+# the same hex: a colour legible on white is rarely legible on near-black.
+# Every one of these clears 4.5:1 against its own background (tested).
+
+ACCENTS = {
+    "Blue": {
+        "light": ("#1f4e79", "#1f4e79", "rgba(31,78,121,0.07)",
+                  "rgba(31,78,121,0.22)"),
+        "dark": ("#7ab3e8", "#9ccbf5", "rgba(122,179,232,0.10)",
+                 "rgba(122,179,232,0.28)"),
+    },
+    "Teal": {
+        "light": ("#0f6257", "#0f6257", "rgba(15,98,87,0.07)",
+                  "rgba(15,98,87,0.22)"),
+        "dark": ("#4fc7ba", "#7ad9cf", "rgba(79,199,186,0.10)",
+                 "rgba(79,199,186,0.28)"),
+    },
+    "Violet": {
+        "light": ("#5b3fa8", "#5b3fa8", "rgba(91,63,168,0.07)",
+                  "rgba(91,63,168,0.22)"),
+        "dark": ("#b49bf0", "#c9b8f6", "rgba(180,155,240,0.10)",
+                 "rgba(180,155,240,0.28)"),
+    },
+    "Amber": {
+        "light": ("#8a5a00", "#8a5a00", "rgba(138,90,0,0.08)",
+                  "rgba(138,90,0,0.24)"),
+        "dark": ("#e0a83d", "#eec06a", "rgba(224,168,61,0.10)",
+                 "rgba(224,168,61,0.28)"),
+    },
+    "Slate": {
+        "light": ("#3d4754", "#3d4754", "rgba(61,71,84,0.06)",
+                  "rgba(61,71,84,0.20)"),
+        "dark": ("#9aa6b5", "#c2cbd6", "rgba(154,166,181,0.10)",
+                 "rgba(154,166,181,0.26)"),
+    },
+}
+
+# ---------------------------------------------------------------------------
+# Density
+# ---------------------------------------------------------------------------
+# Compact tightens vertical rhythm and type without changing the grid, for
+# people working on a laptop screen who would rather see the graph without
+# scrolling. It touches spacing and type only - never hit targets.
+
+DENSITY = {
+    "Comfortable": {},
+    "Compact": {
+        "s3": "9px", "s4": "12px", "s5": "18px", "s6": "24px", "s7": "34px",
+        "t-base": "0.86rem", "t-md": "1.0rem", "t-lg": "1.2rem",
+        "t-xl": "1.7rem", "t-display": "2.2rem",
+    },
+}
+
+
+def _accent_block(accent: str, mode: str) -> str:
+    """Accent tokens for one accent name in one mode."""
+    values = ACCENTS.get(accent, ACCENTS["Blue"])[mode]
+    names = ("accent", "accent-ink", "accent-soft", "accent-line")
+    return "".join(f"--a-{n}:{v};" for n, v in zip(names, values))
 
 # ---------------------------------------------------------------------------
 # Scale: type, space, radius, motion. Mode-independent.
@@ -177,7 +240,8 @@ _MOTION_OVERRIDES = {
 }
 
 
-def _tokens(appearance: str = "Follow system", motion: str = "Full") -> str:
+def _tokens(appearance: str = "Follow system", motion: str = "Full",
+            accent: str = "Blue", density: str = "Comfortable") -> str:
     """Build the token block for the chosen appearance.
 
     The mode is baked in server-side rather than toggled with an attribute,
@@ -185,18 +249,24 @@ def _tokens(appearance: str = "Follow system", motion: str = "Full") -> str:
     <script> and inline handlers - so there is no way to set a data attribute
     on the document at runtime.
     """
-    scale = "".join(f"--a-{name}:{value};" for name, value in SCALE.items())
+    scale_values = dict(SCALE)
+    scale_values.update(DENSITY.get(density, {}))
+    scale = "".join(f"--a-{name}:{value};" for name, value in scale_values.items())
+    light_accent = _accent_block(accent, "light")
+    dark_accent = _accent_block(accent, "dark")
 
     if appearance == "Light":
-        css = f":root{{{_block(LIGHT)}{scale}}}" + _CHROME_OVERRIDE
+        css = (f":root{{{_block(LIGHT)}{light_accent}{scale}}}"
+               + _CHROME_OVERRIDE)
     elif appearance == "Dark":
-        css = f":root{{{_block(DARK)}{scale}}}" + _CHROME_OVERRIDE
+        css = (f":root{{{_block(DARK)}{dark_accent}{scale}}}"
+               + _CHROME_OVERRIDE)
     else:
         # Follow the OS, matching how Streamlit's own frontend decides, so the
         # app chrome and our components cannot drift apart.
-        css = (f":root{{{_block(LIGHT)}{scale}}}"
+        css = (f":root{{{_block(LIGHT)}{light_accent}{scale}}}"
                f"@media (prefers-color-scheme: dark)"
-               f"{{:root{{{_block(DARK)}}}}}")
+               f"{{:root{{{_block(DARK)}{dark_accent}}}}}")
 
     override = _MOTION_OVERRIDES.get(motion)
     if override:
@@ -223,20 +293,27 @@ _COMPONENTS = """
 /* ---- Calculator page ---- */
 .a-calc-title{font-size:var(--a-t-lg);font-weight:640;color:var(--a-ink);
   margin:0;letter-spacing:-0.01em;}
-.a-note{font-size:var(--a-t-base);color:var(--a-ink-muted);line-height:1.6;}
-.a-eyebrow{font-size:var(--a-t-xs);text-transform:uppercase;
-  letter-spacing:0.09em;color:var(--a-ink-faint);font-weight:600;
+.a-note{font-size:var(--a-t-base);color:var(--a-ink-muted);line-height:1.65;
+  max-width:72ch;text-wrap:pretty;}
+.a-sub{max-width:72ch;}
+ul.a-tight li{max-width:88ch;}
+/* A hairline and a sentence-case label, rather than a tracked upper-case
+   kicker repeated above every block. */
+.a-label{display:flex;align-items:center;gap:var(--a-s3);
+  font-size:var(--a-t-sm);color:var(--a-ink-muted);font-weight:560;
   margin:var(--a-s5) 0 var(--a-s2) 0;}
+.a-label::after{content:"";flex:1;height:1px;background:var(--a-border);}
 
 /* ---- Result card: the one thing the eye should land on ---- */
+/* No side stripe and no border-plus-wide-shadow: the surface tint and the
+   accent-coloured value carry the emphasis on their own. */
 .a-result{border:1px solid var(--a-accent-line);
-  border-left:3px solid var(--a-accent);
-  border-radius:var(--a-r-md);padding:var(--a-s3) var(--a-s4) var(--a-s4);
-  background:var(--a-accent-soft);box-shadow:var(--a-shadow);
+  border-radius:var(--a-r-md);padding:var(--a-s4) var(--a-s5) var(--a-s5);
+  background:var(--a-accent-soft);
   margin:var(--a-s1) 0 var(--a-s2) 0;
   animation:a-result-in var(--a-d-slow) var(--a-ease-out) both;}
-.a-result-label{font-size:var(--a-t-xs);text-transform:uppercase;
-  letter-spacing:0.09em;color:var(--a-ink-faint);font-weight:600;}
+.a-result-label{font-size:var(--a-t-sm);color:var(--a-ink-muted);
+  font-weight:500;letter-spacing:0;}
 .a-result-value{font-size:var(--a-t-display);font-weight:640;line-height:1.15;
   color:var(--a-ink);font-variant-numeric:tabular-nums;letter-spacing:-0.02em;
   margin-top:2px;}
@@ -275,8 +352,8 @@ ul.a-tight li{margin-bottom:2px;}
 .stMarkdown table{font-size:var(--a-t-sm);border-collapse:collapse;}
 .stMarkdown table td,.stMarkdown table th{
   border-color:var(--a-border)!important;padding:6px 10px;}
-.stMarkdown table th{color:var(--a-ink-faint);font-weight:600;
-  text-transform:uppercase;font-size:var(--a-t-xs);letter-spacing:0.06em;}
+.stMarkdown table th{color:var(--a-ink-muted);font-weight:600;
+  font-size:var(--a-t-xs);}
 
 /* ---- Entrance ---- */
 @keyframes a-rise{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
@@ -350,6 +427,42 @@ html{font-size:15px;}
 button[kind="primary"]{background-color:var(--a-accent)!important;
   border-color:var(--a-accent)!important;color:#ffffff!important;}
 
+/* Segmented controls, pills and tabs draw their selected state from
+   primaryColor too, which is Streamlit's red here. Same reclaim. */
+button[kind="segmented_controlActive"],
+button[kind="pillsActive"],
+[data-testid="stBaseButton-segmented_controlActive"],
+[data-testid="stBaseButton-pillsActive"]{
+  color:var(--a-accent-ink)!important;
+  border-color:var(--a-accent)!important;
+  background-color:var(--a-accent-soft)!important;}
+[data-baseweb="tab-highlight"]{background-color:var(--a-accent)!important;}
+[role="tab"][aria-selected="true"],
+[role="tab"][aria-selected="true"] *{color:var(--a-accent-ink)!important;}
+[role="tab"]{color:var(--a-ink-muted)!important;}
+[role="tab"]:hover{color:var(--a-ink)!important;}
+
+/* Sidebar quick links ----------------------------------------------------
+   Favourites and recents read as a list of destinations, not a stack of
+   buttons: left-aligned, borderless, and quiet until hovered. */
+.a-sidebar-heading{font-size:var(--a-t-xs);color:var(--a-ink-faint);
+  font-weight:600;margin:var(--a-s4) 0 var(--a-s1) 0;}
+[data-testid="stSidebar"] .st-key-fav\:\:,
+[data-testid="stSidebar"] [class*="st-key-fav"] button,
+[data-testid="stSidebar"] [class*="st-key-rec"] button{
+  justify-content:flex-start;text-align:left;border-color:transparent;
+  background:transparent;font-weight:500;font-size:var(--a-t-sm);
+  color:var(--a-ink-muted);padding-top:2px;padding-bottom:2px;}
+[data-testid="stSidebar"] [class*="st-key-fav"] button:hover,
+[data-testid="stSidebar"] [class*="st-key-rec"] button:hover{
+  color:var(--a-accent-ink);background:var(--a-accent-soft);}
+
+/* The favourite star sits in the page header beside Reset. */
+[class*="st-key-fav\:\:"] button{border-color:transparent;
+  background:transparent;font-size:1.05rem;color:var(--a-ink-faint);}
+[class*="st-key-fav\:\:"] button:hover{color:var(--a-warning);
+  background:var(--a-accent-soft);}
+
 /* Sidebar show/hide ------------------------------------------------------
    Streamlit draws these icons in its own theme colour - near-white - which
    disappears completely on a light page, leaving no visible way to bring the
@@ -407,11 +520,13 @@ button[kind="primary"]{background-color:var(--a-accent)!important;
 """
 
 
-def inject(appearance: str = "Follow system", motion: str = "Full") -> None:
+def inject(appearance: str = "Follow system", motion: str = "Full",
+           accent: str = "Blue", density: str = "Comfortable") -> None:
     """Emit the stylesheet for the chosen appearance and motion level.
 
     `st.html` routes style-only content to Streamlit's event container, so this
     costs no slot in the page layout - unlike `st.markdown`, which creates a
     real (empty) element that participates in index-based reconciliation.
     """
-    st.html(f"<style>{_tokens(appearance, motion)}{_COMPONENTS}</style>")
+    st.html(f"<style>{_tokens(appearance, motion, accent, density)}"
+            f"{_COMPONENTS}</style>")
