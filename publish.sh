@@ -117,10 +117,21 @@ api PUT "/repos/$OWNER/$REPO/topics" "{\"names\": $TOPICS}" >/dev/null
 echo "==> Pushing main"
 git remote get-url origin >/dev/null 2>&1 \
     || git remote add origin "https://github.com/$OWNER/$REPO.git"
-# The token is passed through a credential helper rather than the URL, so it
-# never lands in .git/config or in the process list of other users.
-git -c credential.helper='!f() { echo username=x-access-token; echo "password=$TOKEN"; }; f' \
+# The token goes through a credential helper rather than the URL, so it never
+# lands in .git/config. It must be EXPORTED: git runs the helper in a child
+# shell, which cannot see a plain shell variable. Prefixing the command exports
+# it for this one invocation only.
+TOKEN="$TOKEN" git -c credential.helper='!f() { echo username=x-access-token; echo "password=$TOKEN"; }; f' \
     push -u origin main
+
+# Confirm the commits actually landed rather than trusting the exit code.
+sleep 2
+COMMITS=$(api GET "/repos/$OWNER/$REPO/commits?per_page=1" | python3 -c "import sys,json; d=json.load(sys.stdin); print(len(d) if isinstance(d,list) else 0)")
+if [ "$COMMITS" = "0" ]; then
+    echo "ERROR: the push reported success but GitHub shows no commits."
+    exit 1
+fi
+echo "==> Push confirmed"
 
 # 3. Installer -------------------------------------------------------------
 echo "==> Building the installer"
@@ -157,17 +168,35 @@ Verified by 113 tests: hand-worked known values for every equation, rejection
 tests for invalid input, and headless renders of all 54 pages.
 NOTE
 )
-RELEASE=$(api POST "/repos/$OWNER/$REPO/releases" \
-    "$(python3 -c 'import json,sys; print(json.dumps({"tag_name": sys.argv[1], "name": sys.argv[2], "body": sys.argv[3], "draft": False, "prerelease": False}))' \
-        "v$VERSION" "ASCENT $VERSION" "$NOTES")")
+EXISTING=$(api GET "/repos/$OWNER/$REPO/releases/tags/v$VERSION")
+if echo "$EXISTING" | grep -q '"upload_url"'; then
+    echo "    release v$VERSION already exists - reusing it"
+    RELEASE="$EXISTING"
+    # An asset of the same name would be rejected, so clear it first.
+    ASSET_ID=$(echo "$EXISTING" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+match = [a['id'] for a in data.get('assets', [])
+         if a['name'] == 'ASCENT-$VERSION.dmg']
+print(match[0] if match else '')")
+    if [ -n "$ASSET_ID" ]; then
+        echo "    replacing the previous installer"
+        api DELETE "/repos/$OWNER/$REPO/releases/assets/$ASSET_ID" >/dev/null
+    fi
+else
+    RELEASE=$(api POST "/repos/$OWNER/$REPO/releases" \
+        "$(python3 -c 'import json,sys; print(json.dumps({"tag_name": sys.argv[1], "name": sys.argv[2], "body": sys.argv[3], "draft": False, "prerelease": False}))' \
+            "v$VERSION" "ASCENT $VERSION" "$NOTES")")
+fi
 UPLOAD=$(echo "$RELEASE" | field upload_url | sed 's/{.*}//')
 [ -n "$UPLOAD" ] || { echo "ERROR: release not created. Response:"; echo "$RELEASE" | head -5; exit 1; }
 
-echo "==> Uploading the installer"
+echo "==> Uploading the installer ($(du -h "$DMG" | cut -f1))"
 curl -sS -X POST -H "Authorization: Bearer $TOKEN" \
      -H "Content-Type: application/x-apple-diskimage" \
      --data-binary "@$DMG" \
-     "$UPLOAD?name=ASCENT-$VERSION.dmg" >/dev/null
+     "$UPLOAD?name=ASCENT-$VERSION.dmg" | grep -q '"state"' \
+     || { echo "ERROR: the installer did not upload."; exit 1; }
 
 unset TOKEN
 if [ -n "$TOKEN_FILE" ]; then
