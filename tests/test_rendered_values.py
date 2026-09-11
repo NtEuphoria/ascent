@@ -43,6 +43,7 @@ BASELINES = {
         "Power-to-weight ratio": ("600", "W/kg"),
         "Stall speed": ("15.08", "m/s"),
         "Rate of climb": ("4.861", "m/s"),
+        "Glide performance": ("15,000", "m"),
     },
     "Drones": {
         "Total thrust": ("47.07", "N"),
@@ -55,6 +56,7 @@ BASELINES = {
     "Propulsion": {
         "Momentum theory (hover)": ("30.78", "W"),
         "Hover power & endurance": ("280.1", "W"),
+        "Motor constants (Kv, Kt, back-EMF)": ("0.2003", "N·m"),
         "Rocket equation": ("3,542", "m/s"),
     },
     "Mechanical": {
@@ -95,6 +97,8 @@ BASELINES = {
     },
     "Control systems": {
         "Control error": ("8", "units"),
+        "Second-order step response": ("16.3", "%"),
+        "Ziegler–Nichols tuning": ("4.8", "-"),
     },
     "Unit converter": {
         "Length": ("3.28084", "ft"),

@@ -50,6 +50,39 @@ def stall_speed(weight: float, rho: float, area: float, cl_max: float) -> float:
     return float(np.sqrt(2.0 * weight / (rho * area * cl_max)))
 
 
+def glide_ratio(lift_to_drag: float) -> float:
+    """Glide ratio equals L/D exactly - distance covered per unit height lost."""
+    return v.positive(lift_to_drag, "Lift-to-drag ratio")
+
+
+def glide_distance(height: float, lift_to_drag: float) -> float:
+    """d = h * (L/D)   [m], exact in still air for a steady glide."""
+    height = v.non_negative(height, "Height lost", "m")
+    return height * glide_ratio(lift_to_drag)
+
+
+def glide_angle_deg(lift_to_drag: float) -> float:
+    """gamma = arctan(1 / (L/D))   [deg] below the horizon."""
+    return float(np.degrees(np.arctan(1.0 / glide_ratio(lift_to_drag))))
+
+
+def glide_speed(wing_loading_value: float, rho: float, cl: float,
+                lift_to_drag: float) -> float:
+    """V = sqrt( 2 (W/S) cos(gamma) / (rho C_L) )   [m/s]"""
+    wing_loading_value = v.positive(wing_loading_value, "Wing loading", "N/m^2")
+    rho = v.positive(rho, "Air density", "kg/m^3")
+    cl = v.positive(cl, "Lift coefficient")
+    gamma = np.radians(glide_angle_deg(lift_to_drag))
+    return float(np.sqrt(2.0 * wing_loading_value * np.cos(gamma) / (rho * cl)))
+
+
+def sink_rate(wing_loading_value: float, rho: float, cl: float,
+              lift_to_drag: float) -> float:
+    """w = V sin(gamma)   [m/s] - how fast height is being spent."""
+    speed = glide_speed(wing_loading_value, rho, cl, lift_to_drag)
+    return speed * float(np.sin(np.radians(glide_angle_deg(lift_to_drag))))
+
+
 def rate_of_climb(thrust: float, drag: float, velocity: float, weight: float) -> float:
     """RC = V * (T - D) / W   [m/s]
 
@@ -283,4 +316,67 @@ _CLIMB = Calculator(
     keywords=("climb", "roc", "vertical speed", "excess thrust"),
 )
 
-CALCULATORS = [_TWR, _PWR, _STALL, _CLIMB]
+_GLIDE = Calculator(
+    slug="flight.glide",
+    name="Glide performance",
+    latex=(r"d = h\,\frac{L}{D}, \qquad \tan\gamma = \frac{1}{L/D}, "
+           r"\qquad w = V\sin\gamma"),
+    explanation=(
+        "How far an unpowered aircraft travels for the height it gives up. The "
+        "glide ratio <b>is</b> the lift-to-drag ratio - and it does not depend "
+        "on weight. A heavier aircraft glides exactly as far, just faster and "
+        "sinking quicker."),
+    inputs=[
+        Field("ld", "Lift-to-drag ratio L/D", "-", 15.0, min=0.0),
+        Field("height", "Height lost h", "m", 1000.0, min=0.0),
+        Field("wing_loading", "Wing loading W/S", "N/m²", 120.0, min=0.0,
+              help="For the airspeed and sink rate. Has no effect on how far "
+                   "you glide."),
+        Field("rho", "Air density ρ", "kg/m³", RHO_SL, min=0.0),
+        Field("cl", "Lift coefficient C_L", "-", 0.8, min=0.0),
+    ],
+    compute=lambda i: glide_distance(i.height, i.ld),
+    result=Output("Glide distance", "m"),
+    secondary=[
+        Secondary("Glide ratio", "m per m", lambda i, r: glide_ratio(i.ld)),
+        Secondary("Glide angle below horizontal", "°",
+                  lambda i, r: glide_angle_deg(i.ld)),
+        Secondary("Airspeed along the glide path", "m/s",
+                  lambda i, r: glide_speed(i.wing_loading, i.rho, i.cl, i.ld)),
+        Secondary("Sink rate", "m/s",
+                  lambda i, r: sink_rate(i.wing_loading, i.rho, i.cl, i.ld)),
+    ],
+    assumptions=[
+        "Steady, unaccelerated glide in still air, with lift perpendicular and "
+        "drag parallel to the FLIGHT PATH rather than to the horizon. Under "
+        "that convention d = h × (L/D) is exact, not a small-angle "
+        "approximation.",
+        "Glide distance is independent of weight. Weight changes the speed and "
+        "the sink rate, not the distance - which surprises nearly everyone.",
+        "Best glide and minimum sink are DIFFERENT speeds. Best glide maximises "
+        "L/D; minimum sink maximises C_L^1.5/C_D and is slower. Do not use one "
+        "number for both.",
+        "Still air. A headwind shortens ground distance and is answered by "
+        "flying faster than best glide; a tailwind by flying slower.",
+        "L/D here is the value at this airspeed, not the aircraft's maximum.",
+    ],
+    graph=Sweep(over="ld", y_label="Glide distance [m]", lo_factor=0.2,
+                hi_factor=2.5,
+                title="Glide distance vs L/D at a fixed height lost"),
+    variables=[
+        ("$d$", "Ground distance covered", "m"),
+        ("$h$", "Height lost", "m"),
+        ("$L/D$", "Lift-to-drag ratio, equal to the glide ratio", "-"),
+        ("$\\gamma$", "Glide angle below the horizon", "°"),
+        ("$w$", "Sink rate", "m/s"),
+    ],
+    example=(
+        "Engine failure planning. A UAV at L/D = 15 losing 1000 m covers 15 km "
+        "in still air, descending at 3.8 degrees. Doubling the payload changes "
+        "neither the distance nor the angle - it just makes the aircraft fly "
+        "faster and arrive sooner."),
+    keywords=("glide", "gliding", "dead stick", "sink rate", "glide ratio",
+              "engine failure"),
+)
+
+CALCULATORS = [_TWR, _PWR, _STALL, _CLIMB, _GLIDE]

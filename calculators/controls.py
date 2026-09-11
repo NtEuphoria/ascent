@@ -13,6 +13,7 @@ import streamlit as st
 from utils import ui
 from utils import validation as v
 from utils.plotting import ACCENT, MUTED, PRIMARY, new_figure, show
+from utils.spec import Calculator, Field, Output, Secondary, Sweep
 
 # ---------------------------------------------------------------------------
 # Calculations
@@ -119,6 +120,66 @@ def response_metrics(t, y, setpoint: float, initial_value: float) -> dict:
     elif outside[-1] + 1 < len(t):
         blank["settling_time"] = float(t[outside[-1] + 1])
     return blank
+
+
+def damped_frequency(natural_frequency: float, damping: float) -> float:
+    """omega_d = omega_n sqrt(1 - zeta^2)   [rad/s] - the frequency you SEE."""
+    natural_frequency = v.positive(natural_frequency, "Natural frequency",
+                                   "rad/s")
+    damping = v.in_range(damping, "Damping ratio", 0.0, 0.999)
+    return natural_frequency * float(np.sqrt(1.0 - damping ** 2))
+
+
+def overshoot_percent(damping: float) -> float:
+    """Mp = exp(-pi zeta / sqrt(1 - zeta^2)) * 100   [%]
+
+    Only defined for an underdamped system. At zeta >= 1 there is no overshoot.
+    """
+    damping = v.in_range(damping, "Damping ratio", 0.0, 10.0)
+    if damping >= 1.0:
+        return 0.0
+    return float(np.exp(-np.pi * damping / np.sqrt(1.0 - damping ** 2)) * 100.0)
+
+
+def peak_time(natural_frequency: float, damping: float) -> float:
+    """tp = pi / omega_d   [s]"""
+    return float(np.pi / damped_frequency(natural_frequency, damping))
+
+
+def settling_time(natural_frequency: float, damping: float) -> float:
+    """ts ~= 4 / (zeta omega_n)   [s] to within 2% - an envelope estimate."""
+    natural_frequency = v.positive(natural_frequency, "Natural frequency",
+                                   "rad/s")
+    damping = v.positive(damping, "Damping ratio")
+    return 4.0 / (damping * natural_frequency)
+
+
+def rise_time(natural_frequency: float, damping: float) -> float:
+    """tr = (pi - arccos(zeta)) / omega_d   [s], 0 to 100% for underdamped."""
+    damping = v.in_range(damping, "Damping ratio", 0.0, 0.999)
+    return float((np.pi - np.arccos(damping))
+                 / damped_frequency(natural_frequency, damping))
+
+
+def ziegler_nichols(ultimate_gain: float, ultimate_period: float,
+                    controller: str = "PID"):
+    """Classic ultimate-gain tuning rules. Returns (Kp, Ki, Kd).
+
+    Targets quarter-amplitude decay, which is aggressive by modern standards -
+    roughly 25% overshoot and a gain margin near 2.
+    """
+    ultimate_gain = v.positive(ultimate_gain, "Ultimate gain Ku")
+    ultimate_period = v.positive(ultimate_period, "Ultimate period Tu", "s")
+    if controller == "P":
+        return 0.5 * ultimate_gain, 0.0, 0.0
+    if controller == "PI":
+        kp = 0.45 * ultimate_gain
+        ti = ultimate_period / 1.2
+        return kp, kp / ti, 0.0
+    kp = 0.6 * ultimate_gain
+    ti = ultimate_period / 2.0
+    td = ultimate_period / 8.0
+    return kp, kp / ti, kp * td
 
 
 # ---------------------------------------------------------------------------
@@ -297,7 +358,146 @@ def render_pid() -> None:
     )
 
 
-CALCULATORS = {
-    "Control error": render_error,
-    "PID simulator": render_pid,
-}
+_SECOND_ORDER = Calculator(
+    slug="ctrl.second_order",
+    name="Second-order step response",
+    latex=(r"M_p = e^{-\pi\zeta/\sqrt{1-\zeta^{2}}}, \qquad "
+           r"\omega_d = \omega_n\sqrt{1-\zeta^{2}}, \qquad "
+           r"t_s \approx \frac{4}{\zeta\omega_n}"),
+    explanation=(
+        "The shape of a response, from two numbers. Damping ratio ζ sets how "
+        "much it overshoots and rings; natural frequency ωn sets how fast it "
+        "all happens. The PID simulator's plant is first-order and so cannot "
+        "overshoot on its own - this is where the oscillation comes from."),
+    inputs=[
+        Field("zeta", "Damping ratio ζ", "-", 0.5, min=0.0, max=0.999,
+              help="Under 1 is underdamped and rings. 0.707 is the usual "
+                   "target, giving about 4.3% overshoot."),
+        Field("wn", "Natural frequency ωn", "rad/s", 10.0, min=0.0,
+              help="In rad/s, not Hz. Divide by 2π for hertz."),
+    ],
+    compute=lambda i: overshoot_percent(i.zeta),
+    result=Output("Overshoot", "%"),
+    secondary=[
+        Secondary("Damped frequency ωd (what you actually see)", "rad/s",
+                  lambda i, r: damped_frequency(i.wn, i.zeta)),
+        Secondary("Peak time", "s", lambda i, r: peak_time(i.wn, i.zeta)),
+        Secondary("Rise time (0-100%)", "s",
+                  lambda i, r: rise_time(i.wn, i.zeta)),
+        Secondary("Settling time (±2%)", "s",
+                  lambda i, r: settling_time(i.wn, i.zeta)),
+        Secondary("Ringing frequency", "Hz",
+                  lambda i, r: damped_frequency(i.wn, i.zeta) / (2.0 * np.pi)),
+    ],
+    note=lambda i, r: (
+        "ζ = 0.707 - the usual design target, about 4.3% overshoot with a fast "
+        "settle." if 0.69 < i.zeta < 0.72 else
+        "Very lightly damped: this will ring for a long time." if i.zeta < 0.2
+        else None),
+    assumptions=[
+        "CANONICAL second order: two poles, no zeros, unity DC gain. A zero in "
+        "the numerator increases overshoot, sometimes a lot, and these formulas "
+        "then UNDER-estimate it. Real closed loops are rarely canonical.",
+        "The overshoot formula needs 0 < ζ < 1. At ζ ≥ 1 there is no overshoot "
+        "and no damped frequency to speak of.",
+        "Settling time 4/(ζωn) is an envelope approximation, good to perhaps "
+        "10-20%. The exact value jumps as the last excursion crosses the band.",
+        "ωn is NOT the frequency you observe. The ringing you see is ωd, and "
+        "both are in rad/s rather than hertz - the 2π catches people constantly.",
+    ],
+    graph=Sweep(over="zeta", y_label="Overshoot [%]", lo=0.02, hi_factor=2.0,
+                title="Overshoot vs damping ratio - 0.707 gives about 4.3%"),
+    variables=[
+        ("$\\zeta$", "Damping ratio", "-"),
+        ("$\\omega_n$", "Natural frequency", "rad/s"),
+        ("$\\omega_d$", "Damped (observed) frequency", "rad/s"),
+        ("$M_p$", "Peak overshoot", "%"),
+        ("$t_s$", "Settling time to ±2%", "s"),
+    ],
+    example=(
+        "Specifying a servo loop. Asking for under 5% overshoot means ζ of at "
+        "least about 0.69; asking to settle within 0.5 s then fixes ωn at "
+        "roughly 12 rad/s. Those two numbers are the whole specification, and "
+        "everything else follows from them."),
+    keywords=("second order", "damping", "overshoot", "settling", "zeta",
+              "natural frequency", "step response", "ringing"),
+)
+
+
+def _zn_gains(i):
+    return ziegler_nichols(i.ku, i.tu, i.controller)
+
+
+_ZIEGLER = Calculator(
+    slug="ctrl.ziegler_nichols",
+    name="Ziegler–Nichols tuning",
+    latex=(r"K_p = 0.6\,K_u, \qquad T_i = \frac{T_u}{2}, "
+           r"\qquad T_d = \frac{T_u}{8}"),
+    explanation=(
+        "Starting gains from two measurements: the proportional gain at which "
+        "the loop just oscillates steadily (Ku) and the period of that "
+        "oscillation (Tu). Feed the results into the PID simulator to see what "
+        "they do - and expect to detune them."),
+    inputs=[
+        Field("controller", "Controller type", "", 0, kind="choice",
+              options=["PID", "PI", "P"]),
+        Field("ku", "Ultimate gain Ku", "-", 8.0, min=0.0,
+              help="Proportional gain at which the loop oscillates steadily."),
+        Field("tu", "Ultimate period Tu", "s", 1.5, min=0.0,
+              help="Period of that sustained oscillation."),
+    ],
+    compute=lambda i: _zn_gains(i)[0],
+    result=Output("Proportional gain Kp", "-"),
+    secondary=[
+        Secondary("Integral gain Ki", "1/s", lambda i, r: _zn_gains(i)[1]),
+        Secondary("Derivative gain Kd", "s", lambda i, r: _zn_gains(i)[2]),
+        Secondary("Integral time Ti", "s",
+                  lambda i, r: (_zn_gains(i)[0] / _zn_gains(i)[1]
+                                if _zn_gains(i)[1] else float("nan"))),
+        Secondary("Derivative time Td", "s",
+                  lambda i, r: (_zn_gains(i)[2] / _zn_gains(i)[0]
+                                if _zn_gains(i)[0] else float("nan"))),
+        Secondary("Halved Kp (a common detune)", "-",
+                  lambda i, r: r / 2.0),
+    ],
+    assumptions=[
+        "Ziegler-Nichols targets QUARTER-AMPLITUDE DECAY: roughly 25% overshoot "
+        "and a gain margin near 2. That is aggressive by modern standards and "
+        "often unacceptable on real hardware. Halving Kp is standard practice.",
+        "Finding Ku experimentally means deliberately driving a system into "
+        "sustained oscillation. On anything with stored energy, a moving mass, "
+        "or a person nearby, that is dangerous. Do it in simulation first.",
+        "Assumes a self-regulating process with a single dominant lag. "
+        "Integrating plants - most position loops - need different rules.",
+        "Performs poorly on lag-dominant processes and on plants with strong "
+        "oscillatory modes.",
+        "Modern alternatives worth knowing: Cohen-Coon, AMIGO, and lambda/IMC "
+        "tuning, which trade aggression for robustness.",
+    ],
+    variables=[
+        ("$K_u$", "Ultimate gain - where the loop just oscillates", "-"),
+        ("$T_u$", "Period of that oscillation", "s"),
+        ("$K_p, K_i, K_d$", "Resulting PID gains", "-, 1/s, s"),
+        ("$T_i, T_d$", "Integral and derivative times", "s"),
+    ],
+    example=(
+        "Tuning a temperature loop. If it oscillates steadily at Kp = 8 with a "
+        "1.5 s period, Ziegler-Nichols suggests Kp 4.8, Ki 6.4, Kd 0.9. Put "
+        "those into the PID simulator, then halve Kp and compare - the detuned "
+        "version is usually the one you would actually ship."),
+    keywords=("ziegler", "nichols", "tuning", "pid", "gains", "ku", "tu"),
+)
+
+_PID = Calculator(
+    slug="ctrl.pid", name="PID simulator", latex="", explanation="",
+    render=render_pid,
+    keywords=("pid", "controller", "simulate", "tuning", "step response"),
+)
+
+_ERROR = Calculator(
+    slug="ctrl.error", name="Control error", latex="", explanation="",
+    render=render_error,
+    keywords=("error", "setpoint", "measured", "feedback"),
+)
+
+CALCULATORS = [_ERROR, _PID, _SECOND_ORDER, _ZIEGLER]

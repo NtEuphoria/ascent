@@ -760,3 +760,133 @@ def test_robotics_rejects_impossible_inputs():
         robotics.encoder_resolution_deg(0)                # zero pulses
     with pytest.raises(ValidationError):
         robotics.arm_holding_torque(0.5, 0.15, 120.0)     # angle out of range
+
+
+# --------------------------------------------------------------------------
+# Glide performance
+# --------------------------------------------------------------------------
+def test_glide_distance_is_height_times_ld():
+    assert flight.glide_distance(1000.0, 15.0) == pytest.approx(15000.0)
+
+
+def test_glide_distance_does_not_depend_on_weight():
+    """The classic surprise: a heavier aircraft glides exactly as far."""
+    # Weight appears nowhere in the distance calculation, only in the speeds.
+    light = flight.glide_speed(80.0, 1.225, 0.8, 15.0)
+    heavy = flight.glide_speed(160.0, 1.225, 0.8, 15.0)
+    assert heavy > light                                   # flies faster
+    assert flight.glide_distance(1000.0, 15.0) == pytest.approx(15000.0)
+
+
+def test_glide_angle():
+    assert flight.glide_angle_deg(15.0) == pytest.approx(3.814, rel=1e-3)
+    # A better glider descends more shallowly.
+    assert flight.glide_angle_deg(40.0) < flight.glide_angle_deg(10.0)
+
+
+def test_sink_rate_rises_with_wing_loading():
+    light = flight.sink_rate(80.0, 1.225, 0.8, 15.0)
+    heavy = flight.sink_rate(160.0, 1.225, 0.8, 15.0)
+    assert heavy > light
+
+
+# --------------------------------------------------------------------------
+# Motor constants
+# --------------------------------------------------------------------------
+def test_torque_constant_from_kv():
+    from calculators import propulsion
+    assert propulsion.torque_constant(920.0) == pytest.approx(0.010380, rel=1e-4)
+    # Kt * Kv = 9.5493 always
+    assert propulsion.torque_constant(920.0) * 920.0 == pytest.approx(9.5493,
+                                                                     rel=1e-4)
+
+
+def test_motor_torque_subtracts_no_load_current():
+    from calculators import propulsion
+    assert propulsion.motor_torque(920.0, 20.0, 0.7) == pytest.approx(
+        0.010380 * 19.3, rel=1e-4)
+    # At the no-load current there is no useful torque left.
+    assert propulsion.motor_torque(920.0, 0.7, 0.7) == pytest.approx(0.0)
+
+
+def test_loaded_speed_is_below_kv_times_voltage():
+    from calculators import propulsion
+    unloaded = 920.0 * 22.2
+    loaded = propulsion.motor_speed_rpm(920.0, 22.2, 20.0, 0.08)
+    assert loaded < unloaded
+    assert loaded == pytest.approx(18952, rel=1e-3)
+
+
+def test_motor_efficiency_peaks_below_maximum_power():
+    """Peak efficiency and peak power are different operating points."""
+    from calculators import propulsion
+    currents = [float(c) for c in range(1, 200)]
+    efficiency = [propulsion.motor_efficiency(920.0, 22.2, c, 0.08, 0.7)
+                  for c in currents]
+    power = [propulsion.motor_torque(920.0, c, 0.7)
+             * propulsion.motor_speed_rpm(920.0, 22.2, c, 0.08) * 2 * math.pi / 60
+             for c in currents]
+    best_efficiency = currents[efficiency.index(max(efficiency))]
+    best_power = currents[power.index(max(power))]
+    assert best_efficiency < best_power
+
+
+def test_motor_rejects_impossible_inputs():
+    from calculators import propulsion
+    with pytest.raises(ValidationError):
+        propulsion.torque_constant(0.0)
+    with pytest.raises(ValidationError):
+        propulsion.motor_torque(920.0, -5.0, 0.7)
+
+
+# --------------------------------------------------------------------------
+# Second-order response and Ziegler-Nichols
+# --------------------------------------------------------------------------
+def test_overshoot_textbook_values():
+    from calculators import controls
+    assert controls.overshoot_percent(0.707) == pytest.approx(4.33, rel=1e-2)
+    assert controls.overshoot_percent(0.5) == pytest.approx(16.3, rel=1e-2)
+    assert controls.overshoot_percent(0.0) == pytest.approx(100.0, rel=1e-6)
+
+
+def test_critically_and_over_damped_do_not_overshoot():
+    from calculators import controls
+    assert controls.overshoot_percent(1.0) == 0.0
+    assert controls.overshoot_percent(2.5) == 0.0
+
+
+def test_damped_frequency_is_below_natural():
+    from calculators import controls
+    assert controls.damped_frequency(10.0, 0.5) == pytest.approx(
+        10.0 * math.sqrt(0.75), rel=1e-9)
+    assert controls.damped_frequency(10.0, 0.5) < 10.0
+
+
+def test_settling_time_shortens_with_damping():
+    from calculators import controls
+    assert controls.settling_time(10.0, 0.5) == pytest.approx(0.8, rel=1e-9)
+    assert controls.settling_time(10.0, 0.8) < controls.settling_time(10.0, 0.4)
+
+
+def test_ziegler_nichols_pid_rules():
+    from calculators import controls
+    kp, ki, kd = controls.ziegler_nichols(8.0, 1.5, "PID")
+    assert kp == pytest.approx(4.8)          # 0.6 Ku
+    assert ki == pytest.approx(4.8 / 0.75)   # Kp / (Tu/2)
+    assert kd == pytest.approx(4.8 * 0.1875)  # Kp * (Tu/8)
+
+
+def test_ziegler_nichols_p_and_pi_variants():
+    from calculators import controls
+    assert controls.ziegler_nichols(8.0, 1.5, "P") == (4.0, 0.0, 0.0)
+    kp, ki, kd = controls.ziegler_nichols(8.0, 1.5, "PI")
+    assert kp == pytest.approx(3.6)          # 0.45 Ku
+    assert kd == 0.0                          # no derivative term
+
+
+def test_second_order_rejects_impossible_damping():
+    from calculators import controls
+    with pytest.raises(ValidationError):
+        controls.damped_frequency(10.0, 1.5)   # not underdamped
+    with pytest.raises(ValidationError):
+        controls.ziegler_nichols(0.0, 1.5)

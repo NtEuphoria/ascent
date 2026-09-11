@@ -113,6 +113,46 @@ def delta_v(specific_impulse: float, mass_initial: float,
     return specific_impulse * G0 * float(np.log(mass_initial / mass_final))
 
 
+def torque_constant(kv_rpm_per_volt: float) -> float:
+    """Kt = 60 / (2 pi Kv) = 9.5493 / Kv   [N*m/A]
+
+    Ke in V*s/rad is numerically identical to Kt in SI units. That is a
+    consequence of energy conservation, not a coincidence - and it breaks the
+    moment RPM is mixed into the units.
+    """
+    kv = v.positive(kv_rpm_per_volt, "Kv", "rpm/V")
+    return 60.0 / (2.0 * np.pi * kv)
+
+
+def motor_torque(kv_rpm_per_volt: float, current: float,
+                 no_load_current: float) -> float:
+    """tau = Kt (I - I0)   [N*m]. Current below I0 produces no useful torque."""
+    current = v.non_negative(current, "Current", "A")
+    no_load_current = v.non_negative(no_load_current, "No-load current", "A")
+    return torque_constant(kv_rpm_per_volt) * (current - no_load_current)
+
+
+def motor_speed_rpm(kv_rpm_per_volt: float, voltage: float, current: float,
+                    resistance: float) -> float:
+    """n = (V - I R) * Kv   [rpm] - back-EMF sets the speed, not Kv * V alone."""
+    voltage = v.non_negative(voltage, "Voltage", "V")
+    current = v.non_negative(current, "Current", "A")
+    resistance = v.non_negative(resistance, "Winding resistance", "ohm")
+    kv = v.positive(kv_rpm_per_volt, "Kv", "rpm/V")
+    return max(voltage - current * resistance, 0.0) * kv
+
+
+def motor_efficiency(kv_rpm_per_volt: float, voltage: float, current: float,
+                     resistance: float, no_load_current: float) -> float:
+    """eta = shaft power / electrical power   [-]"""
+    current = v.positive(current, "Current", "A")
+    voltage = v.positive(voltage, "Voltage", "V")
+    torque = motor_torque(kv_rpm_per_volt, current, no_load_current)
+    omega = motor_speed_rpm(kv_rpm_per_volt, voltage, current,
+                            resistance) * 2.0 * np.pi / 60.0
+    return max(torque * omega, 0.0) / (voltage * current)
+
+
 # ---------------------------------------------------------------------------
 # Pages
 # ---------------------------------------------------------------------------
@@ -327,4 +367,89 @@ _ROCKET = Calculator(
               "space"),
 )
 
-CALCULATORS = [_MOMENTUM, _HOVER_ENDURANCE, _ROCKET]
+def _efficiency_curve(i, currents):
+    """Efficiency across the current range, for the graph."""
+    return np.array([
+        motor_efficiency(i.kv, i.voltage, max(float(c), 1e-6), i.resistance,
+                         i.no_load_current) * 100.0
+        for c in currents])
+
+
+_MOTOR = Calculator(
+    slug="prop.motor_constants",
+    name="Motor constants (Kv, Kt, back-EMF)",
+    latex=(r"K_t = \frac{60}{2\pi K_v}, \qquad \tau = K_t (I - I_0), "
+           r"\qquad n = (V - I R)\,K_v"),
+    explanation=(
+        "What a motor's Kv rating actually tells you. Kv fixes the torque "
+        "constant, the torque constant fixes torque per amp, and the voltage "
+        "left after the winding drop fixes speed. A high-Kv motor is not "
+        "'more powerful' - it trades torque for speed at the same power."),
+    inputs=[
+        Field("kv", "Motor Kv", "rpm/V", 920.0, min=0.0,
+              help="Lowercase k, unrelated to kilo. RPM per volt, unloaded."),
+        Field("voltage", "Applied voltage V", "V", 22.2, min=0.0),
+        Field("current", "Current I", "A", 20.0, min=0.0),
+        Field("resistance", "Winding resistance R", "Ω", 0.08, min=0.0),
+        Field("no_load_current", "No-load current I₀", "A", 0.7, min=0.0,
+              help="Current drawn spinning free - iron, friction and windage."),
+    ],
+    compute=lambda i: motor_torque(i.kv, i.current, i.no_load_current),
+    result=Output("Shaft torque", "N·m"),
+    secondary=[
+        Secondary("Torque constant Kt", "N·m/A",
+                  lambda i, r: torque_constant(i.kv)),
+        Secondary("Speed under this load", "rpm",
+                  lambda i, r: motor_speed_rpm(i.kv, i.voltage, i.current,
+                                               i.resistance)),
+        Secondary("Shaft power", "W",
+                  lambda i, r: r * motor_speed_rpm(i.kv, i.voltage, i.current,
+                                                   i.resistance)
+                  * 2.0 * np.pi / 60.0),
+        Secondary("Electrical power", "W", lambda i, r: i.voltage * i.current),
+        Secondary("Efficiency", "%",
+                  lambda i, r: motor_efficiency(i.kv, i.voltage, i.current,
+                                                i.resistance,
+                                                i.no_load_current) * 100.0),
+        Secondary("No-load speed (Kv × V)", "rpm",
+                  lambda i, r: i.kv * i.voltage),
+    ],
+    assumptions=[
+        "Kv is measured UNLOADED and ignores winding resistance, so real speed "
+        "under load is always below Kv × V. The (V - I R) term is that "
+        "difference.",
+        "Kt = 9.5493/Kv is exact for an ideal DC machine. For a three-phase "
+        "BLDC it additionally depends on whether Kv is quoted line-to-line or "
+        "per phase, and on sinusoidal (FOC) versus trapezoidal commutation - "
+        "factors of sqrt(3) appear in the literature. Treat this as a good "
+        "first-order estimate and check the convention.",
+        "Ke in V·s/rad equals Kt in N·m/A in SI units. That identity follows "
+        "from energy conservation and breaks the moment RPM enters the units.",
+        "I₀ is not constant: it rises with speed, so torque at high RPM is "
+        "slightly below Kt(I - I₀).",
+        "Maximum power and maximum efficiency occur at DIFFERENT operating "
+        "points. Peak efficiency sits well above the max-power current; sizing "
+        "to peak power runs a motor hot and wasteful.",
+    ],
+    graph=Sweep(over="current", y_label="Efficiency [%]", lo_factor=0.05,
+                hi_factor=4.0, fn=_efficiency_curve,
+                title="Efficiency vs current - peaks well below the "
+                      "maximum-power point, then falls away"),
+    variables=[
+        ("$K_v$", "Speed constant, unloaded", "rpm/V"),
+        ("$K_t$", "Torque constant", "N·m/A"),
+        ("$K_e$", "Back-EMF constant, numerically equal to Kt", "V·s/rad"),
+        ("$I_0$", "No-load current", "A"),
+        ("$R$", "Winding resistance", "Ω"),
+        ("$\\tau$", "Shaft torque", "N·m"),
+    ],
+    example=(
+        "Reading a datasheet. A 920 kv motor has Kt = 0.0104 N·m/A, so at 20 A "
+        "it makes about 0.20 N·m. On 6S it would spin 20,400 rpm unloaded, but "
+        "the 1.6 V lost across 0.08 Ω at 20 A drops that to about 18,900 rpm - "
+        "and that gap widens sharply as current climbs."),
+    keywords=("motor", "kv", "kt", "back emf", "bldc", "torque constant",
+              "efficiency", "winding"),
+)
+
+CALCULATORS = [_MOMENTUM, _HOVER_ENDURANCE, _MOTOR, _ROCKET]
