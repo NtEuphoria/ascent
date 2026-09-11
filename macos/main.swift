@@ -16,6 +16,7 @@ let supportDir = NSHomeDirectory() + "/Library/Application Support/ASCENT"
 let venvPath = supportDir + "/venv"
 let venvPython = venvPath + "/bin/python3"
 let venvStreamlit = venvPath + "/bin/streamlit"
+let settingsPath = supportDir + "/settings.json"
 let logPath = supportDir + "/launcher.log"
 let serverLogPath = supportDir + "/server.log"
 
@@ -138,6 +139,25 @@ let accentColour = NSColor(name: nil) { appearance in
     return isDark
         ? NSColor(srgbRed: 0.478, green: 0.702, blue: 0.910, alpha: 1)  // #7ab3e8
         : NSColor(srgbRed: 0.122, green: 0.306, blue: 0.475, alpha: 1)  // #1f4e79
+}
+
+/// The appearance the user picked in Settings, or nil to follow the system.
+///
+/// Without this the window, its title bar and the colour behind the page all
+/// follow NSAppearance - the system - so choosing Light on a dark Mac left the
+/// app's chrome dark however light the page itself was.
+func preferredAppearance() -> NSAppearance? {
+    guard let data = FileManager.default.contents(atPath: settingsPath),
+          let parsed = try? JSONSerialization.jsonObject(with: data),
+          let object = parsed as? [String: Any],
+          let choice = object["appearance"] as? String else {
+        return nil
+    }
+    switch choice {
+    case "Light": return NSAppearance(named: .aqua)
+    case "Dark": return NSAppearance(named: .darkAqua)
+    default: return nil          // "Follow system"
+    }
 }
 
 // MARK: - App
@@ -317,6 +337,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         window.minSize = NSSize(width: 900, height: 600)
         window.setFrameAutosaveName("ASCENTMainWindow")
         window.center()
+        // Applied before the background colour resolves, so the dynamic
+        // NSColor picks the chosen mode rather than the system's.
+        window.appearance = preferredAppearance()
+        log("window appearance: "
+            + (window.appearance?.name.rawValue ?? "follow system")
+            + " (system is "
+            + (NSApp.effectiveAppearance.bestMatch(from: [.aqua, .darkAqua])
+               == .darkAqua ? "dark" : "light") + ")")
         window.backgroundColor = backgroundColour
         // Quiet chrome: the app names itself in the page header, so the title
         // bar does not need to repeat it.
@@ -411,6 +439,42 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
+        watchSettings()
+    }
+
+    // MARK: Settings
+
+    var settingsWatcher: Timer?
+    var settingsStamp: Date?
+
+    /// Re-read the appearance setting when the file changes.
+    ///
+    /// Polls rather than using a file-system event source because settings are
+    /// written atomically via os.replace: the original inode is unlinked, so a
+    /// descriptor-based watcher would stop firing after the first save.
+    func watchSettings() {
+        applyAppearance()
+        settingsWatcher = Timer.scheduledTimer(withTimeInterval: 1.5,
+                                               repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            let stamp = (try? FileManager.default.attributesOfItem(
+                atPath: settingsPath)[.modificationDate]) as? Date
+            if stamp != self.settingsStamp {
+                self.settingsStamp = stamp
+                self.applyAppearance()
+            }
+        }
+    }
+
+    func applyAppearance() {
+        let chosen = preferredAppearance()
+        guard window.appearance != chosen else { return }
+        window.appearance = chosen
+        window.backgroundColor = backgroundColour
+        if #available(macOS 12.0, *) {
+            webView.underPageBackgroundColor = backgroundColour
+        }
+        log("appearance applied: \(chosen?.name.rawValue ?? "follow system")")
     }
 
     // MARK: Splash animation
@@ -554,6 +618,30 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             })
     }
 
+    /// Show or hide the sidebar from the menu bar.
+    ///
+    /// Streamlit's own expand control is a small icon in the top-left corner;
+    /// a menu item with a shortcut is a more findable way back once it has
+    /// been collapsed.
+    @objc func toggleSidebar() {
+        webView.evaluateJavaScript("""
+            (function () {
+              var collapse = document.querySelector(
+                  '[data-testid="stSidebarCollapseButton"] button');
+              var expand = document.querySelector(
+                  '[data-testid="stExpandSidebarButton"] button')
+                  || document.querySelector('[data-testid="stExpandSidebarButton"]');
+              var target = expand || collapse;
+              if (target) { target.click(); return true; }
+              return false;
+            })();
+            """, completionHandler: { result, error in
+                if let error = error {
+                    log("sidebar toggle failed: \(error.localizedDescription)")
+                }
+            })
+    }
+
     @objc func reloadPage() { webView.reload() }
     @objc func zoomIn() { webView.pageZoom = min(webView.pageZoom + 0.1, 2.5) }
     @objc func zoomOut() { webView.pageZoom = max(webView.pageZoom - 0.1, 0.5) }
@@ -592,6 +680,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         let viewItem = NSMenuItem()
         mainMenu.addItem(viewItem)
         let viewMenu = NSMenu(title: "View")
+        viewMenu.addItem(withTitle: "Show / Hide Sidebar",
+                         action: #selector(toggleSidebar), keyEquivalent: "\\")
+        viewMenu.addItem(NSMenuItem.separator())
         viewMenu.addItem(withTitle: "Reload", action: #selector(reloadPage),
                          keyEquivalent: "r")
         viewMenu.addItem(NSMenuItem.separator())

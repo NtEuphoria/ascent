@@ -115,7 +115,10 @@ def _block(palette) -> str:
 # stay in the other mode. These rules put our tokens in charge of the surfaces
 # Streamlit paints itself, so "Dark" on a light Mac is actually dark.
 _CHROME_OVERRIDE = """
-.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]{
+/* html and body sit behind everything Streamlit paints. Overriding only
+   .stApp leaves the document background in the other mode, which shows through
+   on overscroll and is what the web view composites against. */
+html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]{
   background:var(--a-bg)!important;}
 [data-testid="stSidebar"],[data-testid="stSidebarContent"]{
   background:var(--a-raised)!important;}
@@ -346,6 +349,25 @@ html{font-size:15px;}
   border-color:var(--a-accent)!important;}
 button[kind="primary"]{background-color:var(--a-accent)!important;
   border-color:var(--a-accent)!important;color:#ffffff!important;}
+
+/* Sidebar show/hide ------------------------------------------------------
+   Streamlit draws these icons in its own theme colour - near-white - which
+   disappears completely on a light page, leaving no visible way to bring the
+   sidebar back. Token-driven so they are legible in both modes, with enough
+   weight to read as a control rather than a stray glyph. */
+[data-testid="stExpandSidebarButton"],
+[data-testid="stSidebarCollapseButton"]{
+  border-radius:var(--a-r-sm);
+  transition:background-color var(--a-d-base) var(--a-ease);}
+[data-testid="stExpandSidebarButton"] *,
+[data-testid="stSidebarCollapseButton"] *{
+  color:var(--a-ink-muted)!important;fill:var(--a-ink-muted)!important;}
+[data-testid="stExpandSidebarButton"]:hover,
+[data-testid="stSidebarCollapseButton"]:hover{
+  background:var(--a-accent-soft);}
+[data-testid="stExpandSidebarButton"]:hover *,
+[data-testid="stSidebarCollapseButton"]:hover *{
+  color:var(--a-accent-ink)!important;fill:var(--a-accent-ink)!important;}
 
 /* Settings lives at the bottom of the sidebar, where macOS apps, Claude and
    ChatGPT all put it. The sidebar body becomes a flex column so the button can

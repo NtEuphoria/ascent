@@ -26,13 +26,23 @@ LINE = "#4a90d9"      # legible on white and on #0e1117
 MARKER = "#e0603f"    # operating point
 GUIDE = "#8a94a6"     # crosshair / reference lines
 
+# Streamlit themes charts from its frontend, which follows the OS. That is
+# right when the app is following the OS too, and wrong the moment the user
+# forces Light or Dark - the chart would keep the other mode's colours. These
+# palettes take over in exactly that case.
+_CHART_LIGHT = {"text": "#4a5463", "title": "#161b22",
+                "grid": "#dfe4ec", "domain": "#c3c9d4"}
+_CHART_DARK = {"text": "#98a4b3", "title": "#e6edf6",
+               "grid": "#262d38", "domain": "#39424f"}
+
 _HEIGHT = 300
 
 
 def sweep_chart(xs, ys, x_label: str, y_label: str, title: str,
                 point_x: Optional[float] = None,
                 point_y: Optional[float] = None,
-                log_y: bool = False) -> None:
+                log_y: bool = False,
+                appearance: str = "Follow system") -> None:
     """Draw one curve with a hover readout and the current operating point.
 
     Column names are deliberately neutral ("x"/"y") because Altair treats
@@ -81,8 +91,26 @@ def sweep_chart(xs, ys, x_label: str, y_label: str, title: str,
                 fontWeight=600).encode(x="x:Q", y="y:Q"))
 
     chart = (alt.layer(*layers)
-             .properties(height=_HEIGHT, title=title)
-             .configure_title(fontSize=13, anchor="start", fontWeight=600)
-             .configure_view(strokeWidth=0)
+             .properties(height=_HEIGHT, title=title, background="transparent")
              .interactive())        # drag to pan, scroll to zoom
+
+    if appearance in ("Light", "Dark"):
+        # Take over completely: Streamlit's own chart theme would still be
+        # following the operating system.
+        palette = _CHART_LIGHT if appearance == "Light" else _CHART_DARK
+        chart = (chart
+                 .configure_title(fontSize=13, anchor="start", fontWeight=600,
+                                  color=palette["title"])
+                 .configure_view(strokeWidth=0)
+                 .configure_axis(labelColor=palette["text"],
+                                 titleColor=palette["title"],
+                                 gridColor=palette["grid"],
+                                 domainColor=palette["domain"],
+                                 tickColor=palette["domain"]))
+        st.altair_chart(chart, use_container_width=True, theme=None)
+        return
+
+    chart = (chart
+             .configure_title(fontSize=13, anchor="start", fontWeight=600)
+             .configure_view(strokeWidth=0))
     st.altair_chart(chart, use_container_width=True)

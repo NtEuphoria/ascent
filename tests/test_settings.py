@@ -166,3 +166,54 @@ def test_reference_toggle_hides_the_reference_block(real_settings_file):
     assert "Where this is used" not in shown
     # Assumptions must survive, whatever else is hidden.
     assert "Assumptions" in shown
+
+
+# --------------------------------------------------------------------------
+# Regressions from forcing a theme against the system
+# --------------------------------------------------------------------------
+def test_forced_theme_covers_html_and_body():
+    """Overriding only .stApp leaves the document background in the other mode.
+
+    It shows through on overscroll and is what the web view composites
+    against, so a forced Light theme still looked dark around the edges.
+    """
+    from utils import theme
+    for mode in ("Light", "Dark"):
+        css = theme._tokens(mode, "Full")
+        assert "html,body" in css.replace(" ", ""), f"{mode} misses html/body"
+
+
+def test_sidebar_controls_are_token_coloured():
+    """Streamlit draws these near-white, which vanishes on a light page.
+
+    With no visible control there is no way to bring the sidebar back.
+    """
+    from utils import theme
+    assert "stExpandSidebarButton" in theme._COMPONENTS
+    assert "stSidebarCollapseButton" in theme._COMPONENTS
+    # Applied always, not only when a theme is forced - the icon has to be
+    # legible whichever mode the app ends up in.
+    assert "stExpandSidebarButton" not in theme._CHROME_OVERRIDE
+
+
+def test_charts_take_over_when_a_theme_is_forced():
+    """Streamlit themes charts from its frontend, which follows the OS.
+
+    Following the system is correct when the app follows it too, and wrong the
+    moment the user forces a mode - the chart keeps the other mode's colours.
+    """
+    from utils import charts
+    assert set(charts._CHART_LIGHT) == set(charts._CHART_DARK)
+    for key in ("text", "title", "grid", "domain"):
+        assert charts._CHART_LIGHT[key] != charts._CHART_DARK[key]
+
+
+def test_matplotlib_plots_are_mode_neutral():
+    """The remaining matplotlib plots cannot adapt after they are rasterised.
+
+    They are drawn transparent with a mid-grey ink that reads on both a white
+    and a near-black page instead.
+    """
+    from utils import plotting
+    assert plotting.FACE == "none"
+    assert plotting.INK == plotting.MUTED

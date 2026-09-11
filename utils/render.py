@@ -117,7 +117,8 @@ def _sweep_series(calc: Calculator, values: Inputs):
     return xs, ys
 
 
-def _draw_graph(calc: Calculator, values: Inputs, result: float) -> None:
+def _draw_graph(calc: Calculator, values: Inputs, result: float,
+                appearance: str = "Follow system") -> None:
     sweep = calc.graph
     field = next((f for f in calc.inputs if f.key == sweep.over), None)
     xs, ys = _sweep_series(calc, values)
@@ -132,6 +133,7 @@ def _draw_graph(calc: Calculator, values: Inputs, result: float) -> None:
         point_x=current if in_range else None,
         point_y=result if in_range else None,
         log_y=sweep.log_y,
+        appearance=appearance,
     )
 
 
@@ -195,7 +197,8 @@ def _render_body(calc: Calculator, prefs: dict) -> None:
 
     if calc.graph is not None and ui.graph_toggle(calc.prefix):
         if result is not None:
-            _draw_graph(calc, values, result)
+            _draw_graph(calc, values, result,
+                        prefs.get("appearance", "Follow system"))
 
     if prefs.get("show_reference", True):
         ui.reference(calc.variables, calc.example)
