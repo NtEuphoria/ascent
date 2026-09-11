@@ -141,7 +141,23 @@ def render(calc: Calculator) -> None:
         calc.render()
         return
 
+    # The header is outside the fragment: it is static for a given calculator,
+    # and Reset deliberately triggers a full rerun so every widget rebuilds.
     ui.page_header(calc.name, calc.latex, calc.explanation, calc.prefix)
+    _render_body(calc)
+
+
+@st.fragment
+def _render_body(calc: Calculator) -> None:
+    """Inputs, result and graph - the part that reruns as you type.
+
+    Without this, changing one number reruns the whole script: sidebar, every
+    category group, the header, everything. Streamlit also dims the entire page
+    to 33% opacity once a rerun passes 500ms, which reads as a flicker.
+
+    Inside a fragment only these elements re-execute and only these can go
+    stale, which is what keeps an edit under the ~400ms that feels instant.
+    """
     values = collect_inputs(calc)
 
     # Reserved slots: these elements always exist, so nothing below them ever

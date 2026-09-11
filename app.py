@@ -13,6 +13,7 @@ import streamlit as st
 
 from calculators import (aerodynamics, controls, drones, electrical, flight,
                          materials, mechanical, reference, rotational, units)
+from utils import palette
 from utils import render as renderer
 from utils import ui
 from utils.spec import normalise
@@ -37,6 +38,17 @@ CATEGORIES = {
 }
 
 
+def all_calculators():
+    """Every calculator in the app, paired with its category.
+
+    Built fresh each run rather than cached: the specs hold lambdas, which do
+    not survive Streamlit's cache, and 54 dataclasses cost nothing to walk.
+    """
+    return [(category, calc)
+            for category, entry in CATEGORIES.items()
+            for calc in normalise(entry, category)]
+
+
 def main() -> None:
     st.set_page_config(
         page_title=f"{TITLE} - Engineering Toolkit",
@@ -46,7 +58,14 @@ def main() -> None:
     )
     ui.inject_css()
 
+    catalogue = all_calculators()
+    palette.trigger(catalogue)          # hidden; the Cmd-K menu item clicks it
+
     with st.sidebar:
+        if st.button(f"Search  ·  {len(catalogue)} calculators",
+                     key="palette_open_visible", use_container_width=True,
+                     help="Or press Cmd-K"):
+            palette.open_dialog(catalogue)
         st.markdown("### Categories")
         category = st.selectbox("Category", list(CATEGORIES.keys()),
                                 key="nav_category", label_visibility="collapsed")

@@ -533,6 +533,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         log("navigation failed: \(error.localizedDescription)")
     }
 
+    /// Cmd-K. Streamlit cannot listen for a keypress itself, so the native menu
+    /// clicks the page's hidden palette trigger. That is an ordinary Streamlit
+    /// interaction over the existing websocket - no reload, no round trip
+    /// through query parameters.
+    @objc func openPalette() {
+        webView.evaluateJavaScript("""
+            (function () {
+              var trigger = document.querySelector(
+                  '.st-key-palette_trigger button');
+              if (trigger) { trigger.click(); return true; }
+              return false;
+            })();
+            """, completionHandler: { result, error in
+                if let error = error {
+                    log("palette shortcut failed: \(error.localizedDescription)")
+                } else if (result as? Bool) == false {
+                    log("palette trigger not found in page")
+                }
+            })
+    }
+
     @objc func reloadPage() { webView.reload() }
     @objc func zoomIn() { webView.pageZoom = min(webView.pageZoom + 0.1, 2.5) }
     @objc func zoomOut() { webView.pageZoom = max(webView.pageZoom - 0.1, 0.5) }
@@ -560,6 +581,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
                         action: #selector(NSApplication.terminate(_:)),
                         keyEquivalent: "q")
         appItem.submenu = appMenu
+
+        let goItem = NSMenuItem()
+        mainMenu.addItem(goItem)
+        let goMenu = NSMenu(title: "Go")
+        goMenu.addItem(withTitle: "Search Calculators…",
+                       action: #selector(openPalette), keyEquivalent: "k")
+        goItem.submenu = goMenu
 
         let viewItem = NSMenuItem()
         mainMenu.addItem(viewItem)

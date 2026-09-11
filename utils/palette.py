@@ -1,0 +1,95 @@
+"""Command palette: jump to any calculator in two keystrokes.
+
+With ~75 calculators, a flat list stops being navigable - Hick's law says
+decision time grows with the number of options, and scanning ten category
+groups to find "hover thrust" is slower than typing "hov".
+
+Streamlit cannot capture a Cmd-K keypress itself: the page runs no JavaScript
+of its own, and `st.html` strips both <script> and inline handlers. So the
+native app owns the shortcut and clicks a hidden trigger button in the page,
+which is a normal Streamlit interaction over the existing websocket - no page
+reload, no query-parameter round trip.
+"""
+from __future__ import annotations
+
+from typing import List, Tuple
+
+import streamlit as st
+
+from .spec import Calculator
+
+TRIGGER_KEY = "palette_trigger"
+
+
+def _score(calc: Calculator, category: str, query: str) -> int:
+    """Rank matches so the obvious answer is first.
+
+    A prefix match on the name beats a match buried in a keyword, which beats
+    a category match. Returns -1 for no match.
+    """
+    name = calc.name.lower()
+    if name.startswith(query):
+        return 0
+    if query in name:
+        return 1
+    if query in calc.search_text():
+        return 2
+    if query in category.lower():
+        return 3
+    return -1
+
+
+def search(items: List[Tuple[str, Calculator]], query: str
+           ) -> List[Tuple[str, Calculator]]:
+    """Filter and rank. An empty query returns everything, unranked."""
+    query = (query or "").strip().lower()
+    if not query:
+        return items
+    scored = []
+    for category, calc in items:
+        rank = _score(calc, category, query)
+        if rank >= 0:
+            scored.append((rank, category, calc))
+    scored.sort(key=lambda row: (row[0], row[2].name))
+    return [(category, calc) for _, category, calc in scored]
+
+
+def open_dialog(items: List[Tuple[str, Calculator]]) -> None:
+    """Show the palette. Selecting an entry navigates and closes it."""
+
+    @st.dialog("Go to calculator", width="large")
+    def _dialog() -> None:
+        query = st.text_input(
+            "Search", key="palette_query", label_visibility="collapsed",
+            placeholder="Search calculators…  try 'hover', 'stall', 'torque'")
+        matches = search(items, query)
+
+        if not matches:
+            st.caption("Nothing matches that. Try a shorter word.")
+            return
+
+        st.caption(f"{len(matches)} of {len(items)} calculators")
+        for category, calc in matches[:12]:
+            if st.button(f"{calc.name}   ·   {category}",
+                         key=f"palette_go::{calc.slug}",
+                         use_container_width=True):
+                # Writing the nav widgets' session-state keys before they are
+                # built on the next run is how Streamlit lets you drive them.
+                st.session_state["nav_category"] = category
+                st.session_state[f"nav_equation::{category}"] = calc.name
+                st.session_state.pop("palette_query", None)
+                st.rerun()
+        if len(matches) > 12:
+            st.caption(f"…and {len(matches) - 12} more. Keep typing to narrow.")
+
+    _dialog()
+
+
+def trigger(items: List[Tuple[str, Calculator]]) -> None:
+    """The hidden button the native Cmd-K menu item clicks.
+
+    Positioned off-screen rather than display:none so it stays a real, clickable
+    element for the native shell's evaluateJavaScript call.
+    """
+    if st.button("Open command palette", key=TRIGGER_KEY):
+        open_dialog(items)

@@ -249,6 +249,23 @@ html{font-size:15px;}
   background:var(--a-accent-soft);}
 [data-testid="stButton"] button:active{transform:translateY(1px);}
 
+/* Command palette -------------------------------------------------------
+   The trigger is moved off-screen rather than display:none, so the native
+   Cmd-K menu item can still click it through evaluateJavaScript.          */
+.st-key-palette_trigger{position:absolute!important;left:-9999px!important;
+  width:1px!important;height:1px!important;overflow:hidden!important;}
+
+.st-key-palette_open_visible button{
+  justify-content:flex-start;color:var(--a-ink-muted);
+  font-size:var(--a-t-sm);}
+.st-key-palette_open_visible button:hover{color:var(--a-accent-ink);}
+
+[data-testid="stDialog"] [data-testid="stButton"] button{
+  justify-content:flex-start;text-align:left;border-color:transparent;
+  background:transparent;font-weight:500;}
+[data-testid="stDialog"] [data-testid="stButton"] button:hover{
+  background:var(--a-accent-soft);border-color:var(--a-accent-line);}
+
 /* Sidebar navigation: the item you are on should be obvious at a glance */
 [data-testid="stSidebar"] [data-testid="stRadio"] label{
   border-radius:var(--a-r-sm);padding:2px var(--a-s2);
