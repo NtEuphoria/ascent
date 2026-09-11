@@ -89,3 +89,33 @@ def test_palette_navigation_mechanism():
     assert at.sidebar.radio[0].value == "Centripetal force"
     rendered = " ".join(block.value for block in at.markdown)
     assert "Centripetal force" in rendered
+
+
+def test_palette_dialog_filters_live():
+    """Typing must re-filter the open dialog.
+
+    A dialog body only re-executes when its function is invoked. Driving the
+    palette straight off its trigger button meant that on the rerun caused by
+    typing - where the button reads False - the dialog was never re-invoked and
+    the results stayed frozen at whatever was showing when it opened.
+    """
+    from streamlit.testing.v1 import AppTest
+
+    at = AppTest.from_file(os.path.join(ROOT, "app.py"), default_timeout=120)
+    at.run()
+    at.session_state[palette.OPEN_KEY] = True
+    at.run()
+
+    assert [t.key for t in at.text_input] == ["palette_query"], \
+        "palette dialog did not render"
+
+    at.text_input(key="palette_query").set_value("momentum").run()
+    results = [b.label for b in at.button
+               if b.key and b.key.startswith("palette_go")]
+    assert any("Momentum theory" in label for label in results)
+    assert any("Linear momentum" in label for label in results)
+    assert len(results) < 5, f"query did not narrow the list: {results}"
+
+    at.text_input(key="palette_query").set_value("zzzznotathing").run()
+    assert not [b for b in at.button
+                if b.key and b.key.startswith("palette_go")]

@@ -12,7 +12,8 @@ from __future__ import annotations
 import streamlit as st
 
 from calculators import (aerodynamics, controls, drones, electrical, flight,
-                         materials, mechanical, reference, rotational, units)
+                         materials, mechanical, propulsion, reference,
+                         rotational, units)
 from utils import palette
 from utils import render as renderer
 from utils import ui
@@ -28,6 +29,7 @@ CATEGORIES = {
     "Aerodynamics": aerodynamics.CALCULATORS,
     "Flight performance": flight.CALCULATORS,
     "Drones": drones.CALCULATORS,
+    "Propulsion": propulsion.CALCULATORS,
     "Mechanical": mechanical.CALCULATORS,
     "Rotational mechanics": rotational.CALCULATORS,
     "Materials": materials.CALCULATORS,
@@ -65,7 +67,8 @@ def main() -> None:
         if st.button(f"Search  ·  {len(catalogue)} calculators",
                      key="palette_open_visible", use_container_width=True,
                      help="Or press Cmd-K"):
-            palette.open_dialog(catalogue)
+            palette.request_open()
+            st.rerun()
         st.markdown("### Categories")
         category = st.selectbox("Category", list(CATEGORIES.keys()),
                                 key="nav_category", label_visibility="collapsed")

@@ -555,3 +555,105 @@ def test_formatting_keeps_significant_digits():
     from utils.formatting import format_number
     assert format_number(9.80665) == "9.807"
     assert format_number(math.pi, sig=6) == "3.14159"
+
+
+# --------------------------------------------------------------------------
+# Propulsion - momentum theory, hover power, rocket equation
+# --------------------------------------------------------------------------
+def test_disk_area_is_the_swept_circle():
+    from calculators import propulsion
+    # A 10-inch propeller: R = 0.127 m -> pi r^2
+    assert propulsion.disk_area(0.127) == pytest.approx(math.pi * 0.127 ** 2)
+
+
+def test_induced_velocity_hover():
+    from calculators import propulsion
+    # v_h = sqrt(T / (2 rho A)), T = 4.9 N on a 10-inch rotor at sea level
+    area = propulsion.disk_area(0.127)
+    assert propulsion.induced_velocity_hover(4.9, area) == pytest.approx(
+        6.2825, rel=1e-3)
+
+
+def test_ideal_hover_power_known_value():
+    from calculators import propulsion
+    area = propulsion.disk_area(0.127)
+    assert propulsion.ideal_hover_power(4.9, area) == pytest.approx(30.78,
+                                                                   rel=1e-3)
+
+
+def test_hover_power_scales_as_thrust_to_the_three_halves():
+    """The central non-linearity: 2x thrust costs 2^1.5 = 2.83x power."""
+    from calculators import propulsion
+    area = propulsion.disk_area(0.127)
+    single = propulsion.ideal_hover_power(10.0, area)
+    double = propulsion.ideal_hover_power(20.0, area)
+    assert double / single == pytest.approx(2 ** 1.5, rel=1e-6)
+
+
+def test_doubling_rotor_radius_halves_ideal_power():
+    """P is proportional to 1/R at fixed thrust - the case for big slow props."""
+    from calculators import propulsion
+    small = propulsion.ideal_hover_power(4.9, propulsion.disk_area(0.0635))
+    large = propulsion.ideal_hover_power(4.9, propulsion.disk_area(0.127))
+    assert small / large == pytest.approx(2.0, rel=1e-6)
+
+
+def test_thinner_air_costs_more_hover_power():
+    from calculators import propulsion
+    area = propulsion.disk_area(0.127)
+    sea_level = propulsion.ideal_hover_power(4.9, area, 1.225)
+    altitude = propulsion.ideal_hover_power(4.9, area, 1.0)
+    assert altitude > sea_level
+
+
+def test_figure_of_merit():
+    from calculators import propulsion
+    assert propulsion.figure_of_merit(30.0, 55.0) == pytest.approx(0.5455,
+                                                                  rel=1e-3)
+
+
+def test_hover_electrical_power_and_endurance():
+    from calculators import propulsion
+    weight = 2.0 * G0
+    power = propulsion.hover_electrical_power(weight, 4, 0.127, 0.55, 0.80)
+    assert power == pytest.approx(280.2, rel=1e-3)
+    assert propulsion.hover_endurance_minutes(111.0, 0.8, power) == \
+        pytest.approx(19.0, rel=1e-2)
+
+
+def test_twenty_percent_more_mass_costs_thirty_one_percent_more_power():
+    from calculators import propulsion
+    light = propulsion.hover_electrical_power(2.0 * G0, 4, 0.127, 0.55, 0.80)
+    heavy = propulsion.hover_electrical_power(2.4 * G0, 4, 0.127, 0.55, 0.80)
+    assert heavy / light == pytest.approx(1.2 ** 1.5, rel=1e-6)
+
+
+def test_rocket_equation_known_values():
+    from calculators import propulsion
+    assert propulsion.delta_v(300.0, 1000.0, 300.0) == pytest.approx(3542,
+                                                                    rel=1e-3)
+    assert propulsion.delta_v(300.0, 1000.0, 200.0) == pytest.approx(4735,
+                                                                    rel=1e-3)
+
+
+def test_rocket_equation_depends_only_on_mass_ratio():
+    from calculators import propulsion
+    assert propulsion.delta_v(300.0, 1000.0, 250.0) == pytest.approx(
+        propulsion.delta_v(300.0, 400.0, 100.0), rel=1e-9)
+
+
+def test_rocket_rejects_gaining_mass():
+    from calculators import propulsion
+    with pytest.raises(ValidationError):
+        propulsion.delta_v(300.0, 100.0, 200.0)
+
+
+def test_propulsion_rejects_impossible_inputs():
+    from calculators import propulsion
+    with pytest.raises(ValidationError):
+        propulsion.disk_area(0.0)
+    with pytest.raises(ValidationError):
+        propulsion.figure_of_merit(30.0, 0.0)
+    with pytest.raises(ValidationError):
+        # figure of merit above 1 would beat the ideal rotor
+        propulsion.hover_electrical_power(20.0, 4, 0.127, 1.5, 0.8)

@@ -19,6 +19,7 @@ import streamlit as st
 from .spec import Calculator
 
 TRIGGER_KEY = "palette_trigger"
+OPEN_KEY = "_palette_open"
 
 
 def _score(calc: Calculator, category: str, query: str) -> int:
@@ -54,10 +55,22 @@ def search(items: List[Tuple[str, Calculator]], query: str
     return [(category, calc) for _, category, calc in scored]
 
 
-def open_dialog(items: List[Tuple[str, Calculator]]) -> None:
-    """Show the palette. Selecting an entry navigates and closes it."""
+def close() -> None:
+    """Forget that the palette is open."""
+    st.session_state[OPEN_KEY] = False
+    st.session_state.pop("palette_query", None)
 
-    @st.dialog("Go to calculator", width="large")
+
+def open_dialog(items: List[Tuple[str, Calculator]]) -> None:
+    """Show the palette. Selecting an entry navigates and closes it.
+
+    Must be called on EVERY rerun while the palette is open, not just on the
+    click that opened it. A dialog body only re-executes when its function is
+    invoked, so calling it once would leave the results frozen at whatever the
+    query was when it opened - typing would filter nothing.
+    """
+
+    @st.dialog("Go to calculator", width="large", on_dismiss=close)
     def _dialog() -> None:
         query = st.text_input(
             "Search", key="palette_query", label_visibility="collapsed",
@@ -77,7 +90,7 @@ def open_dialog(items: List[Tuple[str, Calculator]]) -> None:
                 # built on the next run is how Streamlit lets you drive them.
                 st.session_state["nav_category"] = category
                 st.session_state[f"nav_equation::{category}"] = calc.name
-                st.session_state.pop("palette_query", None)
+                close()
                 st.rerun()
         if len(matches) > 12:
             st.caption(f"…and {len(matches) - 12} more. Keep typing to narrow.")
@@ -85,11 +98,22 @@ def open_dialog(items: List[Tuple[str, Calculator]]) -> None:
     _dialog()
 
 
-def trigger(items: List[Tuple[str, Calculator]]) -> None:
-    """The hidden button the native Cmd-K menu item clicks.
+def request_open() -> None:
+    """Mark the palette as open, so it survives subsequent reruns."""
+    st.session_state[OPEN_KEY] = True
 
-    Positioned off-screen rather than display:none so it stays a real, clickable
-    element for the native shell's evaluateJavaScript call.
+
+def trigger(items: List[Tuple[str, Calculator]]) -> None:
+    """The hidden button the native Cmd-K menu item clicks, plus the dialog.
+
+    The button is positioned off-screen rather than display:none so it stays a
+    real, clickable element for the native shell's evaluateJavaScript call.
+
+    Opening is tracked in session state rather than driven straight off the
+    button: typing in the search box causes a rerun in which the button reads
+    False, and the dialog has to be re-invoked on that rerun to filter.
     """
     if st.button("Open command palette", key=TRIGGER_KEY):
+        request_open()
+    if st.session_state.get(OPEN_KEY):
         open_dialog(items)

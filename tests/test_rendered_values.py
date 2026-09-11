@@ -52,6 +52,11 @@ BASELINES = {
         "Electrical power": ("1,332", "W"),
         "Battery energy": ("111", "Wh"),
     },
+    "Propulsion": {
+        "Momentum theory (hover)": ("30.78", "W"),
+        "Hover power & endurance": ("280.1", "W"),
+        "Rocket equation": ("3,542", "m/s"),
+    },
     "Mechanical": {
         "Force (F = ma)": ("19.61", "N"),
         "Torque": ("10", "N·m"),
