@@ -2,7 +2,9 @@
 # One-shot publish to GitHub: create the repository, push, and publish a
 # release with the macOS installer attached.
 #
-# Usage:   ./publish.sh
+# Usage:   ./publish.sh                              (prompts for the token)
+#          ./publish.sh --token-file ~/token.txt     (reads it from a file)
+#          GITHUB_TOKEN=xxx ./publish.sh             (reads it from the env)
 #
 # You will be asked for a GitHub personal access token. It is read without
 # echoing, held only in memory for this run, and never written to disk, to the
@@ -36,21 +38,64 @@ field() { python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('$1',
 echo "==> ASCENT $VERSION -> github.com/$OWNER/$REPO"
 echo
 
-if [ -n "${GITHUB_TOKEN:-}" ]; then
+TOKEN=""
+TOKEN_FILE=""
+[ "${1:-}" = "--token-file" ] && TOKEN_FILE="${2:-}"
+
+if [ -n "$TOKEN_FILE" ]; then
+    [ -f "$TOKEN_FILE" ] || { echo "ERROR: no such file: $TOKEN_FILE"; exit 1; }
+    TOKEN=$(tr -d ' \t\r\n' < "$TOKEN_FILE")
+    echo "Read the token from $TOKEN_FILE."
+elif [ -n "${GITHUB_TOKEN:-}" ]; then
     TOKEN="$GITHUB_TOKEN"
     echo "Using the token from \$GITHUB_TOKEN."
+elif [ ! -t 0 ]; then
+    read -r TOKEN            # piped in
 else
     echo "A GitHub personal access token is needed (this is not your password)."
-    echo "Create one here, ticking only the 'repo' scope:"
+    echo "Create one here - tick only the 'repo' scope:"
     echo "    https://github.com/settings/tokens/new?scopes=repo&description=ASCENT%20publish"
+    command -v open >/dev/null && open "https://github.com/settings/tokens/new?scopes=repo&description=ASCENT%20publish" 2>/dev/null || true
     echo
-    read -rsp "Paste the token and press Return: " TOKEN
+    echo "  +------------------------------------------------------------+"
+    echo "  |  YOUR TYPING WILL NOT APPEAR. That is deliberate - the      |"
+    echo "  |  token is hidden so it never shows on screen or in your     |"
+    echo "  |  shell history. Paste it (Cmd-V) and press Return. The      |"
+    echo "  |  screen will look unchanged until you do.                   |"
+    echo "  +------------------------------------------------------------+"
+    echo
+    read -rsp "  Paste token, then press Return: " TOKEN
+    echo
     echo
 fi
-[ -n "$TOKEN" ] || { echo "No token given. Nothing was changed."; exit 1; }
+
+TOKEN=$(printf '%s' "$TOKEN" | tr -d ' \t\r\n')
+if [ -z "$TOKEN" ]; then
+    echo "No token received. Nothing was changed."
+    echo
+    echo "If pasting into the prompt does not work in your terminal, use a file"
+    echo "instead - save the token to a text file and run:"
+    echo "    ./publish.sh --token-file ~/Downloads/token.txt"
+    exit 1
+fi
+
+# Confirm receipt without ever printing the token itself.
+echo "==> Token received: ${#TOKEN} characters, starts with ${TOKEN:0:4}"
+case "$TOKEN" in
+    ghp_*|github_pat_*|gho_*) ;;
+    *) echo "    WARNING: that does not look like a GitHub token (expected it"
+       echo "    to start with ghp_ or github_pat_). Continuing anyway." ;;
+esac
 
 LOGIN=$(api GET /user | field login)
-[ -n "$LOGIN" ] || { echo "ERROR: that token was rejected by GitHub."; exit 1; }
+if [ -z "$LOGIN" ]; then
+    echo "ERROR: GitHub rejected that token."
+    echo "  - Has it been revoked, or did it expire?"
+    echo "  - Was the 'repo' scope ticked when you created it?"
+    echo "  - Was the whole token copied? They are about 40 characters."
+    echo "Nothing was changed."
+    exit 1
+fi
 echo "==> Authenticated as $LOGIN"
 
 # 1. Repository ------------------------------------------------------------
@@ -125,6 +170,10 @@ curl -sS -X POST -H "Authorization: Bearer $TOKEN" \
      "$UPLOAD?name=ASCENT-$VERSION.dmg" >/dev/null
 
 unset TOKEN
+if [ -n "$TOKEN_FILE" ]; then
+    rm -f "$TOKEN_FILE"
+    echo "==> Deleted $TOKEN_FILE (it had served its purpose)"
+fi
 echo
 echo "==> Published."
 echo "    https://github.com/$OWNER/$REPO"
