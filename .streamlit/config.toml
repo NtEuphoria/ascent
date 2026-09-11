@@ -1,13 +1,16 @@
-# Clean, professional engineering appearance: light background, muted blue
-# accent, no decoration. Delete this file to fall back to Streamlit defaults.
-[theme]
-base = "light"
-primaryColor = "#1f4e79"
-backgroundColor = "#ffffff"
-secondaryBackgroundColor = "#f4f6f9"
-textColor = "#1b2430"
-font = "sans serif"
-
+# ASCENT theme configuration.
+#
+# There is deliberately NO [theme] section here, and that is load-bearing.
+#
+# Verified empirically against Streamlit 1.50: defining ANY [theme] key - even
+# a colourless one like baseRadius or font - pins the app to a single light or
+# dark mode. Only with no [theme] section at all does Streamlit's frontend fall
+# back to matchMedia("(prefers-color-scheme: dark)") and follow macOS.
+#
+# Following the system is worth more than the handful of conveniences those
+# keys offer, so shape, accent, type scale and widget chrome are all owned by
+# utils/theme.py instead, keyed off the same media query. Adding a [theme]
+# section here will silently break dark mode.
 [client]
 # Hide the Deploy button and developer menu - this runs as a desktop app.
 toolbarMode = "minimal"

@@ -119,6 +119,27 @@ func findPython() -> String? {
     return nil
 }
 
+// MARK: - Appearance
+
+/// Window/splash background, matched to the web content in each mode so the
+/// hand-off from the native splash to the page is seamless. NSColor resolves
+/// this per appearance automatically, including live system theme changes.
+let backgroundColour = NSColor(name: nil) { appearance in
+    let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    return isDark
+        ? NSColor(srgbRed: 0.055, green: 0.067, blue: 0.090, alpha: 1)  // #0e1117
+        : NSColor.white
+}
+
+/// Accent for the splash wordmark. Lifts in dark so it stays legible, matching
+/// the --a-accent token in utils/theme.py.
+let accentColour = NSColor(name: nil) { appearance in
+    let isDark = appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+    return isDark
+        ? NSColor(srgbRed: 0.478, green: 0.702, blue: 0.910, alpha: 1)  // #7ab3e8
+        : NSColor(srgbRed: 0.122, green: 0.306, blue: 0.475, alpha: 1)  // #1f4e79
+}
+
 // MARK: - App
 
 final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
@@ -283,13 +304,24 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         window.minSize = NSSize(width: 900, height: 600)
         window.setFrameAutosaveName("ASCENTMainWindow")
         window.center()
-        window.backgroundColor = .white
+        window.backgroundColor = backgroundColour
+        // Quiet chrome: the app names itself in the page header, so the title
+        // bar does not need to repeat it.
+        window.titlebarAppearsTransparent = true
+        window.titleVisibility = .hidden
 
         let container = NSView(frame: window.contentView!.bounds)
         window.contentView = container
 
         webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
         webView.navigationDelegate = self
+        // Without this the web view paints its own white while loading, which
+        // flashes against a dark splash. underPageBackgroundColor is the public
+        // API for it; the KVC "drawsBackground" trick is private and throws at
+        // launch if the key ever goes away.
+        if #available(macOS 12.0, *) {
+            webView.underPageBackgroundColor = backgroundColour
+        }
         webView.allowsMagnification = true
         webView.isHidden = true
         webView.translatesAutoresizingMaskIntoConstraints = false
@@ -301,7 +333,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
         let title = NSTextField(labelWithString: "ASCENT")
         title.font = NSFont.systemFont(ofSize: 30, weight: .bold)
-        title.textColor = NSColor(red: 0.12, green: 0.31, blue: 0.47, alpha: 1)
+        title.textColor = accentColour
         title.alignment = .center
         title.translatesAutoresizingMaskIntoConstraints = false
 

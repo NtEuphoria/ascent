@@ -15,6 +15,16 @@ sys.path.insert(0, ROOT)
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 from app import CATEGORIES  # noqa: E402
+from utils.spec import normalise  # noqa: E402
+
+
+def calculator_names(category):
+    """The menu labels for a category.
+
+    Derived through the same normalise() the app uses, so these tests do not
+    care whether a module has been converted to declarative specs yet.
+    """
+    return [calc.name for calc in normalise(CATEGORIES[category], category)]
 
 APP_PATH = os.path.join(ROOT, "app.py")
 
@@ -40,7 +50,7 @@ def test_every_calculator_in_category_renders(category):
     at.sidebar.selectbox[0].set_value(category).run()
     assert not at.exception, f"selecting category {category} raised"
 
-    for name in CATEGORIES[category]:
+    for name in calculator_names(category):
         at.sidebar.radio[0].set_value(name).run()
         assert not at.exception, f"{category} / {name} raised an exception"
         assert not at.error, f"{category} / {name} reported an input error " \
@@ -52,7 +62,7 @@ def test_graphs_render(category):
     """Tick every 'Show graph' checkbox and confirm the plot code runs."""
     at = _fresh_app()
     at.sidebar.selectbox[0].set_value(category).run()
-    for name in CATEGORIES[category]:
+    for name in calculator_names(category):
         at.sidebar.radio[0].set_value(name).run()
         for checkbox in at.checkbox:
             if checkbox.label == "Show graph":
@@ -86,4 +96,4 @@ def test_switching_category_keeps_navigation_valid():
     for category in list(CATEGORIES.keys()):
         at.sidebar.selectbox[0].set_value(category).run()
         assert not at.exception
-        assert at.sidebar.radio[0].value in CATEGORIES[category]
+        assert at.sidebar.radio[0].value in calculator_names(category)

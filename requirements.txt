@@ -1,7 +1,12 @@
-# Runtime dependencies
-streamlit>=1.31
-numpy>=1.24
-matplotlib>=3.7
+# Runtime dependencies.
+# Streamlit is PINNED, not floating: the UI targets specific DOM hooks
+# (.st-key-* class names) and APIs (st.fragment, st.context.theme) introduced
+# and shaped in 1.50. The app builds this environment on first launch, so an
+# unpinned range would let a new user install a future version and break the
+# interface. Bump deliberately, after re-checking the selectors.
+streamlit==1.50.0
+numpy>=1.24,<3
+matplotlib>=3.7,<4
 
 # Optional, only needed to run the test suite (pytest tests/)
 # pytest>=7.0

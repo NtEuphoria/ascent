@@ -13,7 +13,9 @@ import streamlit as st
 
 from calculators import (aerodynamics, controls, drones, electrical, flight,
                          materials, mechanical, reference, rotational, units)
+from utils import render as renderer
 from utils import ui
+from utils.spec import normalise
 
 TITLE = "ASCENT"
 ACRONYM = "Aerospace · Structures · Controls · Electronics · Numerics · Toolkit"
@@ -48,16 +50,17 @@ def main() -> None:
         st.markdown("### Categories")
         category = st.selectbox("Category", list(CATEGORIES.keys()),
                                 key="nav_category", label_visibility="collapsed")
-        calculators = CATEGORIES[category]
+        calculators = normalise(CATEGORIES[category], category)
+        by_name = {calc.name: calc for calc in calculators}
         # The radio key includes the category so each category keeps its own
         # selection, and switching category can never leave a stale value.
-        name = st.radio("Equation", list(calculators.keys()),
+        name = st.radio("Equation", list(by_name.keys()),
                         key=f"nav_equation::{category}")
         st.divider()
         st.caption(ui.DISCLAIMER)
 
     ui.app_header(TITLE, ACRONYM, SUBTITLE)
-    calculators[name]()
+    renderer.render(by_name[name])
 
 
 main()

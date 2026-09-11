@@ -18,6 +18,7 @@ import math
 
 import streamlit as st
 
+from . import theme
 from .formatting import format_number
 from .validation import ValidationError
 
@@ -26,49 +27,16 @@ DISCLAIMER = (
     "Critical designs must be independently verified."
 )
 
-_CSS = """
-<style>
-.block-container {max-width: 1150px; padding-top: 2.4rem; padding-bottom: 5rem;}
-h1, h2, h3 {letter-spacing: -0.01em;}
-.app-title {font-size: 1.9rem; font-weight: 700; letter-spacing: 0.08em;
-  margin: 0 0 0.1rem 0; color: #1f4e79;}
-.app-spine {font-size: 0.7rem; font-weight: 600; letter-spacing: 0.1em;
-  text-transform: uppercase; opacity: 0.55; margin: 0 0 0.45rem 0;}
-.app-sub {font-size: 0.92rem; opacity: 0.7; margin: 0 0 0.2rem 0; line-height: 1.45;}
-.calc-title {font-size: 1.25rem; font-weight: 620; margin: 0;}
-.result-card {border: 1px solid rgba(31,78,121,0.22); border-left: 4px solid #1f4e79;
-  border-radius: 8px; padding: 0.85rem 1.15rem 0.95rem 1.15rem;
-  background: rgba(31,78,121,0.045); margin: 0.2rem 0 0.4rem 0;}
-.result-label {font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.09em;
-  opacity: 0.62; font-weight: 600;}
-.result-value {font-size: 2.35rem; font-weight: 620; line-height: 1.2;
-  font-variant-numeric: tabular-nums; margin-top: 0.1rem;}
-.result-unit {font-size: 1.05rem; font-weight: 500; opacity: 0.65; margin-left: 0.4rem;}
-.sec-row {display: flex; flex-wrap: wrap; gap: 1.6rem; margin-top: 0.75rem;
-  padding-top: 0.7rem; border-top: 1px solid rgba(31,78,121,0.15);}
-.sec-k {font-size: 0.74rem; opacity: 0.62; letter-spacing: 0.02em;}
-.sec-v {font-size: 1.02rem; font-weight: 580; font-variant-numeric: tabular-nums;}
-.sec-u {font-size: 0.85rem; font-weight: 400; opacity: 0.65;}
-.small-head {font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.09em;
-  opacity: 0.58; font-weight: 600; margin: 1.15rem 0 0.35rem 0;}
-ul.tight {margin: 0.1rem 0 0 0; padding-left: 1.1rem; font-size: 0.88rem;
-  opacity: 0.85; line-height: 1.6;}
-.note {font-size: 0.88rem; opacity: 0.85; line-height: 1.6;}
-div[data-testid="stMetricValue"] {font-variant-numeric: tabular-nums;}
-</style>
-"""
-
-
 def inject_css() -> None:
-    """Called once per rerun from app.py."""
-    st.markdown(_CSS, unsafe_allow_html=True)
+    """Called once per rerun from app.py. Styling lives in utils/theme.py."""
+    theme.inject()
 
 
 def app_header(title: str, acronym: str, subtitle: str) -> None:
     """Name, what the name stands for, then what the app does."""
-    st.markdown(f'<div class="app-title">{title}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="app-spine">{acronym}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="app-sub">{subtitle}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="a-title">{title}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="a-spine">{acronym}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="a-sub">{subtitle}</div>', unsafe_allow_html=True)
     st.divider()
 
 
@@ -91,12 +59,12 @@ def reset_button(prefix: str) -> None:
 def page_header(title: str, latex: str, explanation: str, prefix: str) -> None:
     left, right = st.columns([6, 1], vertical_alignment="center")
     with left:
-        st.markdown(f'<div class="calc-title">{title}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="a-calc-title">{title}</div>', unsafe_allow_html=True)
     with right:
         reset_button(prefix)
     st.latex(latex)
-    st.markdown(f'<div class="note">{explanation}</div>', unsafe_allow_html=True)
-    st.markdown('<div class="small-head">Inputs</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="a-note">{explanation}</div>', unsafe_allow_html=True)
+    st.markdown('<div class="a-eyebrow">Inputs</div>', unsafe_allow_html=True)
 
 
 # --------------------------------------------------------------------------
@@ -178,18 +146,18 @@ def weight_inputs(prefix: str, default_mass: float = 12.0,
 # --------------------------------------------------------------------------
 def result(label: str, value: float, unit: str, secondary=None, sig: int = 4) -> None:
     """The single large headline number, with optional supporting values."""
-    parts = ['<div class="result-card">',
-             f'<div class="result-label">{label}</div>',
-             f'<div class="result-value">{format_number(value, sig)}'
-             f'<span class="result-unit">{unit}</span></div>']
+    parts = ['<div class="a-result">',
+             f'<div class="a-result-label">{label}</div>',
+             f'<div class="a-result-value">{format_number(value, sig)}'
+             f'<span class="a-result-unit">{unit}</span></div>']
     if secondary:
         items = "".join(
-            f'<div><div class="sec-k">{name}</div>'
-            f'<div class="sec-v">{format_number(val, sig)}'
-            f'<span class="sec-u"> {sunit}</span></div></div>'
+            f'<div><div class="a-sec-k">{name}</div>'
+            f'<div class="a-sec-v">{format_number(val, sig)}'
+            f'<span class="a-sec-u"> {sunit}</span></div></div>'
             for name, val, sunit in secondary
         )
-        parts.append(f'<div class="sec-row">{items}</div>')
+        parts.append(f'<div class="a-sec">{items}</div>')
     parts.append("</div>")
     st.markdown("".join(parts), unsafe_allow_html=True)
 
@@ -200,9 +168,9 @@ def error(exc: Exception) -> None:
 
 def assumptions(items) -> None:
     """Stated directly under the result - never hidden behind a click."""
-    st.markdown('<div class="small-head">Assumptions</div>', unsafe_allow_html=True)
+    st.markdown('<div class="a-eyebrow">Assumptions</div>', unsafe_allow_html=True)
     bullets = "".join(f"<li>{item}</li>" for item in items)
-    st.markdown(f'<ul class="tight">{bullets}</ul>', unsafe_allow_html=True)
+    st.markdown(f'<ul class="a-tight">{bullets}</ul>', unsafe_allow_html=True)
 
 
 def graph_toggle(prefix: str, label: str = "Show graph") -> bool:
@@ -214,14 +182,14 @@ def reference(variables, example: str) -> None:
     st.divider()
     left, right = st.columns([1.15, 1])
     with left:
-        st.markdown('<div class="small-head">Variables</div>', unsafe_allow_html=True)
+        st.markdown('<div class="a-eyebrow">Variables</div>', unsafe_allow_html=True)
         rows = ["| Symbol | Meaning | Unit |", "| --- | --- | --- |"]
         rows += [f"| {sym} | {meaning} | {unit} |" for sym, meaning, unit in variables]
         st.markdown("\n".join(rows))
     with right:
-        st.markdown('<div class="small-head">Where this is used</div>',
+        st.markdown('<div class="a-eyebrow">Where this is used</div>',
                     unsafe_allow_html=True)
-        st.markdown(f'<div class="note">{example}</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="a-note">{example}</div>', unsafe_allow_html=True)
 
 
 def compute(fn):
