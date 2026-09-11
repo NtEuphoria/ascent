@@ -147,7 +147,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var webView: WKWebView!
     var loadingView: NSView!
     var statusLabel: NSTextField!
-    var spinner: NSProgressIndicator!
+    var markHost: NSView!
+    var progressHost: NSView!
+    var wordmark: NSTextField!
+    var markLayer: CAShapeLayer!
+    var progressFill: CAShapeLayer!
     var server: Process?
     var port = 8501
 
@@ -184,6 +188,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
         log("first run - building the Python environment")
         setStatus("First run: setting up. This takes a minute…")
+        setProgress(0.15)
         guard let python = findPython() else {
             fail("Python 3.9 or newer is required.",
                  "ASCENT needs Python to run its calculation engine.\n\n"
@@ -202,6 +207,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         }
 
         setStatus("Installing components (numpy, matplotlib, streamlit)…")
+        setProgress(0.4)
         runSync(venvPython, ["-m", "pip", "install", "--quiet", "--upgrade", "pip"],
                 logTo: serverLogPath)
         let requirements = bundleAppPath + "/requirements.txt"
@@ -231,6 +237,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         }
         port = free
         setStatus("Starting the calculation engine…")
+        setProgress(0.6)
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: venvStreamlit)
@@ -256,9 +263,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             return
         }
 
+        // Development aid: ASCENT_SPLASH_HOLD=8 keeps the splash up so the
+        // startup animation can actually be watched. A warm start is ~1s.
+        if let hold = ProcessInfo.processInfo.environment["ASCENT_SPLASH_HOLD"],
+           let seconds = Double(hold) {
+            Thread.sleep(forTimeInterval: seconds)
+        }
+
         for _ in 0..<60 {
             if serverIsUp(port: port) {
                 log("engine ready")
+                setProgress(0.85)
                 DispatchQueue.main.async {
                     self.setStatus("Loading…")
                     if let url = URL(string: "http://127.0.0.1:\(self.port)") {
@@ -282,8 +297,6 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     func fail(_ message: String, _ detail: String) {
         log("ERROR: \(message) — \(detail)")
         DispatchQueue.main.async {
-            self.spinner.stopAnimation(nil)
-            self.spinner.isHidden = true
             self.statusLabel.stringValue = message
             let alert = NSAlert()
             alert.alertStyle = .critical
@@ -328,29 +341,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         container.addSubview(webView)
 
         loadingView = NSView()
+        loadingView.wantsLayer = true
         loadingView.translatesAutoresizingMaskIntoConstraints = false
         container.addSubview(loadingView)
 
-        let title = NSTextField(labelWithString: "ASCENT")
-        title.font = NSFont.systemFont(ofSize: 30, weight: .bold)
-        title.textColor = accentColour
-        title.alignment = .center
-        title.translatesAutoresizingMaskIntoConstraints = false
+        // The dart mark, drawn as a stroke rather than shown all at once.
+        markHost = NSView()
+        markHost.wantsLayer = true
+        markHost.translatesAutoresizingMaskIntoConstraints = false
+        loadingView.addSubview(markHost)
+
+        let wordmark = NSTextField(labelWithString: "ASCENT")
+        wordmark.font = NSFont.systemFont(ofSize: 26, weight: .bold)
+        wordmark.textColor = accentColour
+        wordmark.alignment = .center
+        wordmark.translatesAutoresizingMaskIntoConstraints = false
+        wordmark.alphaValue = 0
+        loadingView.addSubview(wordmark)
+        self.wordmark = wordmark
+
+        // A determinate hairline, driven by real boot phases rather than a
+        // spinner that conveys nothing.
+        progressHost = NSView()
+        progressHost.wantsLayer = true
+        progressHost.translatesAutoresizingMaskIntoConstraints = false
+        loadingView.addSubview(progressHost)
 
         statusLabel = NSTextField(labelWithString: "Starting up…")
-        statusLabel.font = NSFont.systemFont(ofSize: 13)
+        statusLabel.font = NSFont.systemFont(ofSize: 12)
         statusLabel.textColor = .secondaryLabelColor
         statusLabel.alignment = .center
         statusLabel.translatesAutoresizingMaskIntoConstraints = false
-
-        spinner = NSProgressIndicator()
-        spinner.style = .spinning
-        spinner.controlSize = .small
-        spinner.startAnimation(nil)
-        spinner.translatesAutoresizingMaskIntoConstraints = false
-
-        loadingView.addSubview(title)
-        loadingView.addSubview(spinner)
         loadingView.addSubview(statusLabel)
 
         NSLayoutConstraint.activate([
@@ -362,25 +383,149 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             loadingView.bottomAnchor.constraint(equalTo: container.bottomAnchor),
             loadingView.leadingAnchor.constraint(equalTo: container.leadingAnchor),
             loadingView.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-            title.centerXAnchor.constraint(equalTo: loadingView.centerXAnchor),
-            title.centerYAnchor.constraint(equalTo: loadingView.centerYAnchor,
-                                           constant: -30),
-            spinner.centerXAnchor.constraint(equalTo: loadingView.centerXAnchor),
-            spinner.topAnchor.constraint(equalTo: title.bottomAnchor, constant: 18),
+
+            markHost.centerXAnchor.constraint(equalTo: loadingView.centerXAnchor),
+            markHost.centerYAnchor.constraint(equalTo: loadingView.centerYAnchor,
+                                              constant: -58),
+            markHost.widthAnchor.constraint(equalToConstant: 84),
+            markHost.heightAnchor.constraint(equalToConstant: 84),
+
+            wordmark.centerXAnchor.constraint(equalTo: loadingView.centerXAnchor),
+            wordmark.topAnchor.constraint(equalTo: markHost.bottomAnchor,
+                                          constant: 14),
+
+            progressHost.centerXAnchor.constraint(equalTo: loadingView.centerXAnchor),
+            progressHost.topAnchor.constraint(equalTo: wordmark.bottomAnchor,
+                                              constant: 22),
+            progressHost.widthAnchor.constraint(equalToConstant: 190),
+            progressHost.heightAnchor.constraint(equalToConstant: 2),
+
             statusLabel.centerXAnchor.constraint(equalTo: loadingView.centerXAnchor),
-            statusLabel.topAnchor.constraint(equalTo: spinner.bottomAnchor,
-                                             constant: 14),
+            statusLabel.topAnchor.constraint(equalTo: progressHost.bottomAnchor,
+                                             constant: 16),
         ])
+
+        loadingView.layoutSubtreeIfNeeded()
+        buildSplashLayers()
+        playIntro()
 
         window.makeKeyAndOrderFront(nil)
         NSApp.activate(ignoringOtherApps: true)
     }
 
+    // MARK: Splash animation
+
+    /// Whether the user has asked the system to reduce motion.
+    var reduceMotion: Bool {
+        NSWorkspace.shared.accessibilityDisplayShouldReduceMotion
+    }
+
+    func buildSplashLayers() {
+        // The dart from the app icon, in an 84pt box. Built as a CGPath rather
+        // than NSBezierPath.cgPath, which is macOS 14+ only.
+        let path = CGMutablePath()
+        let s: CGFloat = 84.0 / 1024.0        // icon artwork is 1024pt
+        path.move(to: CGPoint(x: 512 * s, y: 812 * s))
+        path.addLine(to: CGPoint(x: 806 * s, y: 236 * s))
+        path.addLine(to: CGPoint(x: 512 * s, y: 380 * s))
+        path.addLine(to: CGPoint(x: 218 * s, y: 236 * s))
+        path.closeSubpath()
+
+        let mark = CAShapeLayer()
+        mark.path = path
+        mark.strokeColor = accentColour.cgColor
+        mark.fillColor = NSColor.clear.cgColor
+        mark.lineWidth = 2.5
+        mark.lineJoin = .round
+        mark.lineCap = .round
+        mark.strokeEnd = reduceMotion ? 1 : 0
+        mark.fillRule = .nonZero
+        markHost.layer?.addSublayer(mark)
+        markLayer = mark
+
+        let track = CAShapeLayer()
+        let trackPath = CGMutablePath()
+        trackPath.move(to: CGPoint(x: 0, y: 1))
+        trackPath.addLine(to: CGPoint(x: 190, y: 1))
+        track.path = trackPath
+        track.strokeColor = accentColour.withAlphaComponent(0.18).cgColor
+        track.lineWidth = 2
+        track.lineCap = .round
+        progressHost.layer?.addSublayer(track)
+
+        let fill = CAShapeLayer()
+        fill.path = trackPath
+        fill.strokeColor = accentColour.cgColor
+        fill.lineWidth = 2
+        fill.lineCap = .round
+        fill.strokeEnd = 0
+        progressHost.layer?.addSublayer(fill)
+        progressFill = fill
+    }
+
+    /// Mark strokes itself in, then the wordmark fades up beneath it.
+    func playIntro() {
+        guard !reduceMotion else {
+            wordmark.alphaValue = 1
+            return
+        }
+        let stroke = CABasicAnimation(keyPath: "strokeEnd")
+        stroke.fromValue = 0
+        stroke.toValue = 1
+        stroke.duration = 0.55
+        stroke.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
+        stroke.fillMode = .forwards
+        stroke.isRemovedOnCompletion = false
+        markLayer.add(stroke, forKey: "draw")
+
+        // Fill the mark in behind the stroke once it has drawn.
+        let fillIn = CABasicAnimation(keyPath: "fillColor")
+        fillIn.fromValue = NSColor.clear.cgColor
+        fillIn.toValue = accentColour.withAlphaComponent(0.12).cgColor
+        fillIn.beginTime = CACurrentMediaTime() + 0.5
+        fillIn.duration = 0.35
+        fillIn.fillMode = .forwards
+        fillIn.isRemovedOnCompletion = false
+        markLayer.add(fillIn, forKey: "fill")
+
+        NSAnimationContext.runAnimationGroup { context in
+            context.duration = 0.45
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            wordmark.animator().alphaValue = 1
+        }
+    }
+
+    /// Advance the hairline. Fractions correspond to real boot milestones, so
+    /// the bar means something rather than just moving.
+    func setProgress(_ fraction: CGFloat) {
+        DispatchQueue.main.async {
+            guard let fill = self.progressFill else { return }
+            let animation = CABasicAnimation(keyPath: "strokeEnd")
+            animation.fromValue = fill.presentation()?.strokeEnd ?? fill.strokeEnd
+            animation.toValue = fraction
+            animation.duration = self.reduceMotion ? 0 : 0.4
+            animation.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            animation.fillMode = .forwards
+            animation.isRemovedOnCompletion = false
+            fill.strokeEnd = fraction
+            fill.add(animation, forKey: "progress")
+        }
+    }
+
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         log("page loaded")
-        spinner.stopAnimation(nil)
-        loadingView.isHidden = true
+        setProgress(1.0)
+        // A hard isHidden swap here was the most jarring moment in v1.0.0.
+        webView.alphaValue = 0
         webView.isHidden = false
+        NSAnimationContext.runAnimationGroup({ context in
+            context.duration = self.reduceMotion ? 0 : 0.32
+            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            self.webView.animator().alphaValue = 1
+            self.loadingView.animator().alphaValue = 0
+        }, completionHandler: {
+            self.loadingView.isHidden = true
+        })
     }
 
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!,

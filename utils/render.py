@@ -23,8 +23,7 @@ from typing import Any, Dict, List
 import numpy as np
 import streamlit as st
 
-from . import ui
-from .plotting import PRIMARY, mark_point, new_figure, show
+from . import charts, ui
 from .spec import Calculator, Field, Inputs
 from .validation import ValidationError
 
@@ -122,19 +121,18 @@ def _draw_graph(calc: Calculator, values: Inputs, result: float) -> None:
     sweep = calc.graph
     field = next((f for f in calc.inputs if f.key == sweep.over), None)
     xs, ys = _sweep_series(calc, values)
-
-    fig, (ax,) = new_figure()
-    ax.plot(xs, ys, color=PRIMARY, linewidth=2)
     current = float(values[sweep.over])
-    if np.isfinite(result) and xs[0] <= current <= xs[-1]:
-        mark_point(ax, current, result, "current")
-    ax.set_xlabel(sweep.x_label or
-                  (f"{field.label} [{field.unit}]" if field else sweep.over))
-    ax.set_ylabel(sweep.y_label)
-    if sweep.log_y:
-        ax.set_yscale("log")
-    ax.set_title(sweep.title, fontsize=10, loc="left")
-    show(fig)
+    in_range = bool(np.isfinite(result) and xs[0] <= current <= xs[-1])
+    charts.sweep_chart(
+        xs, ys,
+        x_label=sweep.x_label or (f"{field.label} [{field.unit}]"
+                                  if field else sweep.over),
+        y_label=sweep.y_label,
+        title=sweep.title,
+        point_x=current if in_range else None,
+        point_y=result if in_range else None,
+        log_y=sweep.log_y,
+    )
 
 
 def render(calc: Calculator) -> None:
