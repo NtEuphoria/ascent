@@ -23,9 +23,9 @@ from typing import Any, Dict, List
 import numpy as np
 import streamlit as st
 
-from . import charts, settings, ui
+from . import analysis, charts, navigate, settings, ui
 from .formatting import format_number
-from .spec import Calculator, Field, Inputs
+from .spec import Calculator, Field, Inputs, Sweep
 from .validation import ValidationError
 
 MAX_COLUMNS = 4
@@ -84,13 +84,12 @@ def collect_inputs(calc: Calculator) -> Inputs:
     return Inputs(values)
 
 
-def _sweep_series(calc: Calculator, values: Inputs):
+def _sweep_series(calc: Calculator, values: Inputs, sweep: Sweep):
     """Recompute the result across a range of one input.
 
     Points that fail validation (a zero area, a negative speed) become NaN so
     the curve simply breaks there instead of the page erroring.
     """
-    sweep = calc.graph
     current = float(values[sweep.over])
     high = max(current * sweep.hi_factor, sweep.hi_min or 0.0)
     if high <= 0:
@@ -118,11 +117,10 @@ def _sweep_series(calc: Calculator, values: Inputs):
     return xs, ys
 
 
-def _draw_graph(calc: Calculator, values: Inputs, result: float,
+def _draw_graph(calc: Calculator, values: Inputs, result: float, sweep: Sweep,
                 appearance: str = "Follow system") -> None:
-    sweep = calc.graph
     field = next((f for f in calc.inputs if f.key == sweep.over), None)
-    xs, ys = _sweep_series(calc, values)
+    xs, ys = _sweep_series(calc, values, sweep)
     current = float(values[sweep.over])
     in_range = bool(np.isfinite(result) and xs[0] <= current <= xs[-1])
     charts.sweep_chart(
@@ -135,6 +133,28 @@ def _draw_graph(calc: Calculator, values: Inputs, result: float,
         point_y=result if in_range else None,
         log_y=sweep.log_y,
         appearance=appearance,
+    )
+    _download_series(calc, sweep, field, xs, ys)
+
+
+def _download_series(calc: Calculator, sweep: Sweep, field, xs, ys) -> None:
+    """Offer the plotted points as CSV.
+
+    A curve you can only look at is a picture; a curve you can export is data.
+    Built as text rather than through pandas so the column headers carry the
+    units exactly as the axis does.
+    """
+    x_name = sweep.x_label or (f"{field.label} [{field.unit}]" if field
+                               else sweep.over)
+    rows = [f"{x_name},{sweep.y_label}"]
+    rows += [f"{x:.10g},{'' if not np.isfinite(y) else format(y, '.10g')}"
+             for x, y in zip(xs, ys)]
+    st.download_button(
+        "Download these points (CSV)",
+        data="\n".join(rows).encode("utf-8"),
+        file_name=f"{calc.slug.replace('.', '-')}-{sweep.over}.csv",
+        mime="text/csv",
+        key=f"dl_{calc.prefix}_{sweep.over}",
     )
 
 
@@ -165,7 +185,126 @@ def _copy_block(calc: Calculator, values: Inputs, result: float,
         st.code("\n".join(lines), language=None)
 
 
-def render(calc: Calculator, prefs=None) -> None:
+
+
+# ---------------------------------------------------------------------------
+# The analysis area: everything derived from the result rather than shown with
+# it. Kept below the assumptions, which stay visible on every page.
+# ---------------------------------------------------------------------------
+_LEVELS = {"info": st.info, "warning": st.warning, "danger": st.error}
+
+
+def _influence_table(calc: Calculator, values: Inputs, result: float) -> None:
+    """Which input actually drives this number, measured rather than asserted."""
+    ranked = analysis.influences(calc, values, result)
+    usable = [item for item in ranked if item.usable]
+    if not usable:
+        st.caption("No influence can be measured at this operating point - "
+                   "an input or the result is zero here.")
+        return
+
+    st.markdown(
+        '<div class="a-note">Each row is the percentage change in the result '
+        'for a one percent change in that input, measured by nudging the input '
+        'and recomputing. For a power law it is exactly the exponent, so a '
+        'value of 2.00 means the result goes as the square of that input.</div>',
+        unsafe_allow_html=True)
+
+    strongest = abs(usable[0].elasticity)
+    rows = ["| Input | Effect on the result | Strength |", "| --- | --- | --- |"]
+    for item in ranked:
+        if not item.usable:
+            rows.append(f"| {item.label} | Not measurable here "
+                        f"({item.reason}) | |")
+            continue
+        share = abs(item.elasticity) / strongest if strongest else 0.0
+        bar = "\u2588" * max(1, int(round(share * 12)))
+        sign = "+" if item.elasticity >= 0 else "\u2212"
+        rows.append(f"| {item.label} | {sign}{abs(item.elasticity):.2f}% "
+                    f"per +1% | `{bar}` |")
+    st.markdown("\n".join(rows))
+    st.caption(analysis.describe(usable[0]) + "  That makes "
+               f"{usable[0].label} the input worth getting right first.")
+
+
+def _related(calc: Calculator, catalogue) -> None:
+    """One-click jumps to the calculators this one leads to."""
+    entries = [catalogue[slug] for slug in calc.related if slug in catalogue]
+    if not entries:
+        st.caption("No linked calculators yet.")
+        return
+    st.markdown('<div class="a-note">These answer the question this page '
+                'raises next.</div>', unsafe_allow_html=True)
+    per_row = 3
+    for start in range(0, len(entries), per_row):
+        chunk = entries[start:start + per_row]
+        # Always ask for a full row of columns so a trailing pair does not
+        # stretch to half the page each.
+        for column, (category, other) in zip(st.columns(per_row), chunk):
+            with column:
+                if st.button(f"{other.name}  ·  {category}",
+                             key=f"rel_{calc.prefix}_{other.slug}",
+                             use_container_width=True):
+                    navigate.request(other.slug)
+                    st.rerun()
+
+
+def _analysis(calc: Calculator, values: Inputs, result, catalogue,
+              prefs: dict) -> None:
+    """Graphs, influence, reference data and links, in one tabbed block.
+
+    Tabs rather than a stack because these are alternatives, not a sequence:
+    you come here with one question, not four. The tab set is fixed by the
+    spec, so it never changes shape as you type.
+    """
+    labels, drawers = [], []
+
+    for sweep in calc.graphs:
+        labels.append(sweep.title.split(" (")[0][:34])
+        drawers.append(("graph", sweep))
+    if calc.sensitivity and calc.compute is not None:
+        labels.append("What drives this")
+        drawers.append(("influence", None))
+    for table in calc.references:
+        labels.append(table.title[:34])
+        drawers.append(("reference", table))
+    if calc.related:
+        labels.append("Related")
+        drawers.append(("related", None))
+    if not labels:
+        return
+
+    st.markdown('<div class="a-label">Explore</div>', unsafe_allow_html=True)
+    for tab, (kind, payload) in zip(st.tabs(labels), drawers):
+        with tab:
+            if kind == "graph":
+                if result is None:
+                    st.caption("Fix the inputs above to draw this.")
+                else:
+                    _draw_graph(calc, values, result, payload,
+                                prefs.get("appearance", "Follow system"))
+            elif kind == "influence":
+                if result is None:
+                    st.caption("Fix the inputs above to measure this.")
+                else:
+                    _influence_table(calc, values, result)
+            elif kind == "reference":
+                _reference_table(payload)
+            else:
+                _related(calc, catalogue)
+
+
+def _reference_table(table) -> None:
+    header = "| " + " | ".join(table.columns) + " |"
+    divider = "| " + " | ".join("---" for _ in table.columns) + " |"
+    body = ["| " + " | ".join(str(cell) for cell in row) for row in table.rows]
+    body = [row + " |" for row in body]
+    st.markdown("\n".join([header, divider] + body))
+    if table.note:
+        st.caption(table.note)
+
+
+def render(calc: Calculator, prefs=None, catalogue=None) -> None:
     """Draw a complete calculator page."""
     if calc.render is not None:          # imperative escape hatch
         calc.render()
@@ -180,11 +319,11 @@ def render(calc: Calculator, prefs=None) -> None:
     if starred:
         settings.toggle_favourite(calc.slug)
         st.rerun()
-    _render_body(calc, prefs)
+    _render_body(calc, prefs, catalogue or {})
 
 
 @st.fragment
-def _render_body(calc: Calculator, prefs: dict) -> None:
+def _render_body(calc: Calculator, prefs: dict, catalogue: dict) -> None:
     """Inputs, result and graph - the part that reruns as you type.
 
     Without this, changing one number reruns the whole script: sidebar, every
@@ -201,6 +340,7 @@ def _render_body(calc: Calculator, prefs: dict) -> None:
     error_slot = st.empty()
     result_slot = st.container(key=f"result_{calc.prefix}")
     note_slot = st.empty()
+    check_slots = [st.empty() for _ in calc.checks]
 
     result = None
     try:
@@ -225,14 +365,24 @@ def _render_body(calc: Calculator, prefs: dict) -> None:
             caption = calc.note(values, result)
             if caption:
                 note_slot.caption(caption)
+
+    for check, slot in zip(calc.checks, check_slots):
+        verdict = None
+        if result is not None:
+            try:
+                verdict = check.fn(values, result)
+            except (ValidationError, ZeroDivisionError, ValueError):
+                verdict = None
+        if verdict:
+            level, message = verdict
+            with slot:
+                _LEVELS.get(level, st.info)(message)
+
+    if result is not None:
         _copy_block(calc, values, result, secondary, significant)
 
     ui.assumptions(calc.assumptions)
-
-    if calc.graph is not None and ui.graph_toggle(calc.prefix):
-        if result is not None:
-            _draw_graph(calc, values, result,
-                        prefs.get("appearance", "Follow system"))
+    _analysis(calc, values, result, catalogue, prefs)
 
     if prefs.get("show_reference", True):
         ui.reference(calc.variables, calc.example,

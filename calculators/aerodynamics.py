@@ -14,7 +14,8 @@ import numpy as np
 
 from utils import validation as v
 from utils.constants import G0, MU_AIR_SL, RHO_SL
-from utils.spec import Calculator, Field, Output, Secondary, Sweep
+from utils.spec import (Calculator, Check, Field, Output, Reference,
+                        Secondary, Sweep)
 
 # ---------------------------------------------------------------------------
 # Calculations
@@ -117,8 +118,47 @@ _LIFT = Calculator(
         "No ground effect and no propeller slipstream over the wing.",
         "This is an exact definition, not an estimate: the equation defines C_L.",
     ],
-    graph=Sweep(over="v", y_label="Lift L [N]", hi_factor=1.6, hi_min=10.0,
-                title="Lift vs velocity (parabolic: L is proportional to V squared)"),
+    graphs=[
+        Sweep(over="v", y_label="Lift L [N]", hi_factor=1.6, hi_min=10.0,
+              title="Lift vs velocity"),
+        Sweep(over="cl", y_label="Lift L [N]", lo=0.0, hi_factor=2.0,
+              hi_min=1.5, title="Lift vs lift coefficient"),
+        Sweep(over="s", y_label="Lift L [N]", hi_factor=2.0, hi_min=1.0,
+              title="Lift vs wing area"),
+    ],
+    checks=[
+        Check(lambda i, r: ("warning",
+                            f"At {i.v:.0f} m/s you are near Mach "
+                            f"{i.v / 340.3:.2f} at sea level. Above about Mach "
+                            "0.3 air can no longer be treated as "
+                            "incompressible, and C_L starts to change with "
+                            "speed - this number becomes an underestimate.")
+              if i.v > 102.0 else None),
+        Check(lambda i, r: ("info",
+                            "A negative C_L means the wing is pushing down "
+                            "rather than up - inverted flight, or a race-car "
+                            "wing.") if i.cl < 0 else None),
+    ],
+    references=[
+        Reference(
+            title="Typical lift coefficients",
+            columns=("Condition", "C_L"),
+            rows=[
+                ("Transport aircraft in cruise", "0.4 - 0.6"),
+                ("Light aircraft in cruise", "0.3 - 0.5"),
+                ("Sailplane in cruise", "0.4 - 0.8"),
+                ("Maximum, plain aerofoil, no flaps", "1.2 - 1.5"),
+                ("Maximum, with slotted flaps", "2.0 - 2.8"),
+                ("Maximum, with slats and flaps", "2.5 - 3.2"),
+                ("Flat plate, thin-aerofoil theory", "2*pi*alpha (alpha in rad)"),
+            ],
+            note="Ranges for whole aircraft at sensible angles of attack. A "
+                 "specific aerofoil section can exceed these; a wing with a "
+                 "fuselage through it usually does not.",
+        ),
+    ],
+    related=["aero.drag", "aero.lift_to_drag", "aero.wing_loading",
+             "flight.stall_speed"],
     variables=[
         ("$L$", "Lift force", "N"),
         ("$\\rho$", "Air density", "kg/m³"),

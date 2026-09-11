@@ -170,3 +170,14 @@ def test_the_checkbox_accent_applies_in_every_appearance():
         assert rule in css, appearance
         block = css.split(rule, 1)[1].split("}", 1)[0]
         assert "var(--a-accent)" in block, appearance
+
+
+def test_the_mark_never_follows_the_accent_setting():
+    """An accent is a preference; a mark is an identity. Changing Amber in
+    Settings must not repaint the dart amber."""
+    blues = set()
+    for accent in theme.ACCENTS:
+        css = theme.stylesheet("Light", "Full", accent, "Comfortable")
+        blues.add(css.split("--a-mark:", 1)[1].split(";", 1)[0])
+    assert blues == {theme.LIGHT["mark"]}
+    assert ".a-brand svg path{fill:var(--a-mark);}" in theme._COMPONENTS

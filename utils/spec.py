@@ -113,6 +113,36 @@ class Sweep:
 
 
 @dataclass
+class Reference:
+    """A table of real values for a quantity the page asks the user to guess.
+
+    Most of these equations need a coefficient the user does not know: a drag
+    coefficient, a rolling resistance, a propeller figure of merit. Asking for
+    it without saying what a plausible one looks like turns an accurate
+    calculator into a precise way of producing a wrong answer.
+    """
+
+    title: str
+    columns: Sequence[str]
+    rows: Sequence[Sequence[str]]
+    note: str = ""
+    """Where the numbers came from, or what would make them not apply."""
+
+
+@dataclass
+class Check:
+    """A regime test run against the user's inputs.
+
+    `fn` returns (level, message) or None, with level one of
+    "info" | "warning" | "danger". Use it where an equation stays happy to
+    compute but has stopped being true - incompressible aerodynamics above
+    Mach 0.3, momentum theory in the vortex ring state, a beam past yield.
+    """
+
+    fn: Callable[["Inputs", float], Optional[Tuple[str, str]]]
+
+
+@dataclass
 class Calculator:
     """Everything needed to render one calculator page."""
 
@@ -128,12 +158,27 @@ class Calculator:
     variables: List[Tuple[str, str, str]] = field(default_factory=list)
     example: str = ""
     graph: Optional[Sweep] = None
+    """One graph. Prefer `graphs` for more than one; both end up in `graphs`."""
+    graphs: List[Sweep] = field(default_factory=list)
+    references: List[Reference] = field(default_factory=list)
+    checks: List[Check] = field(default_factory=list)
+    related: Sequence[str] = ()
+    """Slugs of calculators that answer the next question this one raises."""
+    sensitivity: bool = True
+    """Show the derived influence table. Off only where it says nothing -
+    a page whose result is a lookup rather than a function of its inputs."""
     note: Optional[Callable[[Inputs, float], Optional[str]]] = None
     """Optional caption under the result - return None for no caption."""
     render: Optional[Callable[[], None]] = None
     """Escape hatch: draw the whole page yourself and ignore everything above."""
     keywords: Sequence[str] = ()
     """Extra search terms for the command palette."""
+
+    def __post_init__(self) -> None:
+        # One code path downstream: `graph=` is the common single-graph case
+        # and stays supported, but the renderer only ever reads `graphs`.
+        if self.graph is not None and self.graph not in self.graphs:
+            self.graphs = [self.graph] + list(self.graphs)
 
     @property
     def prefix(self) -> str:

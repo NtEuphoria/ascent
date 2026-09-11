@@ -14,7 +14,7 @@ import streamlit as st
 from calculators import (aerodynamics, controls, drones, electrical, flight,
                          materials, mechanical, propulsion, reference,
                          robotics, rotational, structures, units)
-from utils import palette
+from utils import navigate, palette
 from utils import render as renderer
 from utils import settings as user_settings
 from utils import ui
@@ -102,6 +102,9 @@ def main() -> None:
             st.session_state["nav_category"] = category
             st.session_state[f"nav_equation::{category}"] = calc.name
 
+    # Both of these write navigation widget keys, so both must run before the
+    # sidebar builds those widgets.
+    navigate.apply(by_slug)
     palette.trigger(catalogue)          # hidden; the Cmd-K menu item clicks it
 
     with st.sidebar:
@@ -142,7 +145,7 @@ def main() -> None:
     ui.app_header(TITLE, ACRONYM, SUBTITLE)
     chosen = by_name[name]
     user_settings.record_visit(chosen.slug)
-    renderer.render(chosen, prefs)
+    renderer.render(chosen, prefs, by_slug)
 
 
 main()

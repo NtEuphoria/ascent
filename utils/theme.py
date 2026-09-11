@@ -44,6 +44,7 @@ LIGHT = {
     "danger-soft": "rgba(179,38,30,0.07)",
     "grid": "#dfe4ec",
     "edge": "rgba(255,255,255,0.90)",
+    "mark": "#1f4e79",
     "shadow": "0 1px 2px rgba(16,24,40,0.04), 0 2px 8px rgba(16,24,40,0.06)",
     "shadow-lift": "0 2px 4px rgba(16,24,40,0.06), 0 8px 24px rgba(16,24,40,0.10)",
 }
@@ -71,6 +72,7 @@ DARK = {
     "danger-soft": "rgba(255,107,96,0.10)",
     "grid": "rgba(255,255,255,0.08)",
     "edge": "rgba(255,255,255,0.055)",
+    "mark": "#7ab3e8",
     "shadow": "0 0 0 1px rgba(255,255,255,0.04)",
     "shadow-lift": "0 0 0 1px rgba(255,255,255,0.08), 0 12px 32px rgba(0,0,0,0.45)",
 }
@@ -317,7 +319,7 @@ _COMPONENTS = """
 .a-brand{display:flex;align-items:center;gap:var(--a-s3);
   margin:0 0 var(--a-s1) 0;}
 .a-brand svg{width:22px;height:22px;flex:none;display:block;}
-.a-brand svg path{fill:var(--a-accent);}
+.a-brand svg path{fill:var(--a-mark);}
 .a-title{font-size:var(--a-t-xl);font-weight:680;letter-spacing:0.11em;
   color:var(--a-accent-ink);margin:0;line-height:1;
   font-family:var(--a-font-ui);}
