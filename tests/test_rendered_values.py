@@ -82,6 +82,12 @@ BASELINES = {
         "Density": ("2,700", "kg/m³"),
         "Specific strength": ("102.2", "kN·m/kg"),
     },
+    "Robotics": {
+        "Differential drive kinematics": ("0.6283", "m/s"),
+        "Gear train: reflected inertia": ("0.2652", "N·m"),
+        "Servo / arm holding torque": ("0.7355", "N·m"),
+        "Encoder resolution": ("0.018", "°"),
+    },
     "Electrical / robotics": {
         "Resistors in series": ("600", "Ω"),
         "Resistors in parallel": ("54.55", "Ω"),

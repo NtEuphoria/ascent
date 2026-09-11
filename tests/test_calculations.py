@@ -657,3 +657,106 @@ def test_propulsion_rejects_impossible_inputs():
     with pytest.raises(ValidationError):
         # figure of merit above 1 would beat the ideal rotor
         propulsion.hover_electrical_power(20.0, 4, 0.127, 1.5, 0.8)
+
+
+# --------------------------------------------------------------------------
+# Robotics - drive kinematics, drivetrain, actuators, encoders
+# --------------------------------------------------------------------------
+def test_wheel_speed_from_rpm():
+    from calculators import robotics
+    # 2 pi r n / 60: a 40 mm wheel at 120 rpm
+    assert robotics.wheel_speed(120.0, 0.04) == pytest.approx(0.50265, rel=1e-4)
+
+
+def test_differential_drive_known_values():
+    from calculators import robotics
+    left = robotics.wheel_speed(120.0, 0.04)
+    right = robotics.wheel_speed(180.0, 0.04)
+    assert robotics.body_velocity(left, right) == pytest.approx(0.6283, rel=1e-3)
+    assert robotics.body_angular_velocity(left, right, 0.20) == pytest.approx(
+        1.2566, rel=1e-3)
+    assert robotics.turn_radius(left, right, 0.20) == pytest.approx(0.5, rel=1e-6)
+
+
+def test_equal_wheels_drive_straight():
+    from calculators import robotics
+    assert robotics.body_angular_velocity(1.0, 1.0, 0.2) == 0.0
+    assert robotics.turn_radius(1.0, 1.0, 0.2) == float("inf")
+
+
+def test_opposite_wheels_spin_in_place():
+    from calculators import robotics
+    assert robotics.body_velocity(-1.0, 1.0) == pytest.approx(0.0)
+    assert robotics.turn_radius(-1.0, 1.0, 0.2) == pytest.approx(0.0)
+
+
+def test_inertia_reflects_as_one_over_ratio_squared():
+    """The square is the whole point - 1/N would be the classic error."""
+    from calculators import robotics
+    assert robotics.reflected_inertia(0.02, 10.0) == pytest.approx(2.0e-4)
+    assert robotics.reflected_inertia(0.02, 5.0) == pytest.approx(8.0e-4)
+    # Halving the ratio quadruples reflected inertia, not doubles it.
+    assert (robotics.reflected_inertia(0.02, 5.0)
+            / robotics.reflected_inertia(0.02, 10.0)) == pytest.approx(4.0)
+
+
+def test_motor_torque_has_a_minimum_over_gear_ratio():
+    """Too little reduction and the load dominates; too much and the rotor does.
+
+    This only holds when acceleration is specified at the LOAD. With motor
+    acceleration fixed the expression falls monotonically toward J_m * alpha,
+    and there is no optimum - which is exactly the modelling error this test
+    caught on first write.
+    """
+    from calculators import robotics
+    torques = [(n, robotics.motor_torque_required(2.0, 0.02, 1.5e-5, n, 0.9, 20.0))
+               for n in range(2, 200)]
+    best_ratio, best = min(torques, key=lambda row: row[1])
+    assert torques[0][1] > best, "no minimum: falling at the low-ratio end"
+    assert torques[-1][1] > best, "no minimum: still falling at the high end"
+    # The closed form must agree with the numerical scan.
+    closed = robotics.torque_minimising_ratio(2.0, 0.02, 1.5e-5, 0.9, 20.0)
+    assert closed == pytest.approx(best_ratio, abs=1.0)
+
+
+def test_optimal_ratio_is_inertia_matched():
+    from calculators import robotics
+    assert robotics.optimal_ratio(0.02, 1.5e-5) == pytest.approx(
+        math.sqrt(0.02 / 1.5e-5), rel=1e-9)
+
+
+def test_arm_torque_worst_case_is_horizontal():
+    from calculators import robotics
+    horizontal = robotics.arm_holding_torque(0.5, 0.15, 0.0)
+    assert horizontal == pytest.approx(0.7355, rel=1e-3)
+    assert robotics.arm_holding_torque(0.5, 0.15, 60.0) < horizontal
+    assert robotics.arm_holding_torque(0.5, 0.15, 90.0) == pytest.approx(
+        0.0, abs=1e-12)
+
+
+def test_servo_torque_in_datasheet_units():
+    from calculators import robotics
+    torque = robotics.arm_holding_torque(0.5, 0.15, 0.0)
+    assert torque / G0 * 100.0 == pytest.approx(7.5, rel=1e-2)  # kgf*cm
+
+
+def test_encoder_quadrature_is_four_counts_per_pulse():
+    from calculators import robotics
+    assert robotics.encoder_resolution_deg(500, 1.0) == pytest.approx(
+        360.0 / 2000.0)
+    assert robotics.encoder_resolution_deg(500, 10.0) == pytest.approx(0.018)
+    # Without quadrature decoding the resolution is four times coarser.
+    assert (robotics.encoder_resolution_deg(500, 1.0, quadrature=False)
+            / robotics.encoder_resolution_deg(500, 1.0)) == pytest.approx(4.0)
+
+
+def test_robotics_rejects_impossible_inputs():
+    from calculators import robotics
+    with pytest.raises(ValidationError):
+        robotics.body_angular_velocity(1.0, 2.0, 0.0)     # zero track width
+    with pytest.raises(ValidationError):
+        robotics.reflected_inertia(0.02, 0.0)             # zero gear ratio
+    with pytest.raises(ValidationError):
+        robotics.encoder_resolution_deg(0)                # zero pulses
+    with pytest.raises(ValidationError):
+        robotics.arm_holding_torque(0.5, 0.15, 120.0)     # angle out of range
