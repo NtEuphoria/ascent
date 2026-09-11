@@ -890,3 +890,115 @@ def test_second_order_rejects_impossible_damping():
         controls.damped_frequency(10.0, 1.5)   # not underdamped
     with pytest.raises(ValidationError):
         controls.ziegler_nichols(0.0, 1.5)
+
+
+# --------------------------------------------------------------------------
+# Structures - sections, beams, elastic constants
+# --------------------------------------------------------------------------
+def test_second_moment_rectangle():
+    from calculators import structures
+    # b h^3 / 12, in metres, for a 20 x 40 mm bar standing on edge
+    assert structures.second_moment_of_area(
+        "Solid rectangle", 0.020, 0.040, 0.0) == pytest.approx(
+            0.020 * 0.040 ** 3 / 12.0, rel=1e-9)
+
+
+def test_beam_orientation_changes_stiffness_fourfold():
+    """A 2:1 rectangle is (h/b)^2 = 4x stiffer on edge than laid flat."""
+    from calculators import structures
+    on_edge = structures.second_moment_of_area("Solid rectangle", 0.020,
+                                               0.040, 0.0)
+    laid_flat = structures.second_moment_of_area("Solid rectangle", 0.040,
+                                                 0.020, 0.0)
+    assert on_edge / laid_flat == pytest.approx(4.0, rel=1e-9)
+
+
+def test_second_moment_circle():
+    from calculators import structures
+    assert structures.second_moment_of_area(
+        "Solid circle", 0.010, 0.010, 0.0) == pytest.approx(
+            math.pi * 0.010 ** 4 / 64.0, rel=1e-9)
+
+
+def test_hollow_tube_keeps_most_stiffness_for_less_area():
+    """Why drone arms are tubes: the core carries almost no bending load."""
+    from calculators import structures
+    solid = structures.second_moment_of_area("Solid circle", 0.020, 0.020, 0.0)
+    tube = structures.second_moment_of_area("Hollow circle (tube)", 0.020,
+                                            0.020, 0.002)
+    assert tube / solid > 0.55          # keeps over half the stiffness
+    solid_area = structures.section_area("Solid circle", 0.020, 0.020, 0.0)
+    tube_area = structures.section_area("Hollow circle (tube)", 0.020, 0.020,
+                                        0.002)
+    assert tube_area / solid_area < 0.40   # for well under half the material
+
+
+def test_hollow_section_rejects_impossible_wall():
+    from calculators import structures
+    with pytest.raises(ValidationError):
+        structures.second_moment_of_area("Hollow circle (tube)", 0.020, 0.020,
+                                         0.0)
+    with pytest.raises(ValidationError):
+        structures.second_moment_of_area("Hollow circle (tube)", 0.020, 0.020,
+                                         0.012)
+
+
+def test_beam_bending_known_values():
+    from calculators import structures
+    moment = structures.bending_moment("Cantilever, point load at the end",
+                                       500.0, 1.0)
+    assert moment == pytest.approx(500.0)
+    stress = structures.bending_stress(moment, 0.020, 1.0e5 * 1e-12)
+    assert stress / 1e6 == pytest.approx(100.0, rel=1e-3)
+    deflection = structures.beam_deflection(
+        "Cantilever, point load at the end", 500.0, 1.0, 69e9, 1.0e5 * 1e-12)
+    assert deflection * 1000.0 == pytest.approx(24.2, rel=1e-2)
+
+
+def test_deflection_scales_with_span_cubed_for_a_point_load():
+    from calculators import structures
+    single = structures.beam_deflection("Cantilever, point load at the end",
+                                        500.0, 1.0, 69e9, 1e-7)
+    double = structures.beam_deflection("Cantilever, point load at the end",
+                                        500.0, 2.0, 69e9, 1e-7)
+    assert double / single == pytest.approx(8.0, rel=1e-9)
+
+
+def test_deflection_scales_with_span_to_the_fourth_for_uniform_load():
+    from calculators import structures
+    single = structures.beam_deflection("Cantilever, uniform load", 500.0, 1.0,
+                                        69e9, 1e-7)
+    double = structures.beam_deflection("Cantilever, uniform load", 500.0, 2.0,
+                                        69e9, 1e-7)
+    assert double / single == pytest.approx(16.0, rel=1e-9)
+
+
+def test_fixed_ends_deflect_less_than_simply_supported():
+    from calculators import structures
+    simple = structures.beam_deflection("Simply supported, centre point load",
+                                        500.0, 1.0, 69e9, 1e-7)
+    fixed = structures.beam_deflection("Fixed both ends, centre point load",
+                                       500.0, 1.0, 69e9, 1e-7)
+    assert fixed == pytest.approx(simple / 4.0, rel=1e-9)
+
+
+def test_elastic_constants():
+    from calculators import structures
+    assert structures.shear_modulus(69e9, 0.33) / 1e9 == pytest.approx(25.94,
+                                                                      rel=1e-3)
+    assert structures.bulk_modulus(69e9, 0.33) / 1e9 == pytest.approx(67.65,
+                                                                     rel=1e-3)
+
+
+def test_bulk_modulus_diverges_as_material_becomes_incompressible():
+    from calculators import structures
+    assert (structures.bulk_modulus(69e9, 0.499)
+            > 100 * structures.bulk_modulus(69e9, 0.3))
+
+
+def test_elastic_constants_reject_impossible_poisson_ratio():
+    from calculators import structures
+    with pytest.raises(ValidationError):
+        structures.shear_modulus(69e9, 0.6)      # above the 0.5 bound
+    with pytest.raises(ValidationError):
+        structures.bulk_modulus(69e9, -1.5)

@@ -77,6 +77,11 @@ BASELINES = {
         "Moment of inertia": ("0.003125", "kg·m²"),
         "Rotational kinetic energy": ("21.93", "J"),
     },
+    "Structures": {
+        "Second moment of area": ("1.067e-07", "m⁴"),
+        "Beam bending": ("100", "MPa"),
+        "Elastic constants (E, ν, G, K)": ("25.94", "GPa"),
+    },
     "Materials": {
         "Normal stress": ("63.66", "MPa"),
         "Strain": ("0.0012", "-"),

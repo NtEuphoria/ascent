@@ -13,7 +13,7 @@ import streamlit as st
 
 from calculators import (aerodynamics, controls, drones, electrical, flight,
                          materials, mechanical, propulsion, reference,
-                         robotics, rotational, units)
+                         robotics, rotational, structures, units)
 from utils import palette
 from utils import render as renderer
 from utils import settings as user_settings
@@ -33,6 +33,7 @@ CATEGORIES = {
     "Propulsion": propulsion.CALCULATORS,
     "Mechanical": mechanical.CALCULATORS,
     "Rotational mechanics": rotational.CALCULATORS,
+    "Structures": structures.CALCULATORS,
     "Materials": materials.CALCULATORS,
     "Robotics": robotics.CALCULATORS,
     "Electrical / robotics": electrical.CALCULATORS,
