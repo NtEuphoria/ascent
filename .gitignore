@@ -1,0 +1,16 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+
+# Build output
+dist/
+
+# Runtime artifacts
+launcher.log
+server.log
+.server.pid
+
+# macOS
+.DS_Store

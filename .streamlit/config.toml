@@ -1,0 +1,16 @@
+# Clean, professional engineering appearance: light background, muted blue
+# accent, no decoration. Delete this file to fall back to Streamlit defaults.
+[theme]
+base = "light"
+primaryColor = "#1f4e79"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f4f6f9"
+textColor = "#1b2430"
+font = "sans serif"
+
+[client]
+# Hide the Deploy button and developer menu - this runs as a desktop app.
+toolbarMode = "minimal"
+
+[browser]
+gatherUsageStats = false
