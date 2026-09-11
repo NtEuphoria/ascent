@@ -26,7 +26,7 @@ Python and already portable; only the native window is macOS-specific.
 
 ### Download the installer
 
-Grab `ASCENT-1.0.0.dmg` from the
+Grab `ASCENT-1.1.0.dmg` from the
 [latest release](../../releases/latest), open it, and drag **ASCENT** into your
 Applications folder.
 
@@ -76,6 +76,9 @@ address bar.
 - `Cmd-Q` quits, and shuts the calculation engine down with it
 - `Cmd-R` reloads, `Cmd +/-/0` zoom
 - The window remembers its size and position
+- **⌘K** opens a searchable palette over every calculator
+- **⚙ Settings**, bottom-left, for appearance, motion, result precision and
+  reference sections — stored in the support folder and kept between launches
 - **ASCENT → Show Logs & Data Folder** opens the support folder
 
 Under the hood it is a native Cocoa app wrapping a WKWebView around a local
@@ -104,8 +107,9 @@ Run the tests:
 .venv/bin/pip install pytest && .venv/bin/python -m pytest tests/ -q
 ```
 
-113 tests: hand-worked known values for every equation, rejection tests for bad
-inputs, and headless renders of all 54 pages including every graph.
+206 tests: hand-worked known values for every equation, rejection tests for bad
+inputs, headless renders of every page, and end-to-end checks that each page's
+headline number is what it should be.
 
 ### Build scripts
 
@@ -124,22 +128,28 @@ by `streamlit run` — the app itself cleans up after itself on quit.
 
 ## What is included
 
+**68 calculators across 13 categories.** Every one shows its equation, defines
+each variable, states its assumptions under the result, and gives a real
+example of where it is used.
+
 | Category | Calculators |
 | --- | --- |
 | **Aerodynamics** | Lift, drag, dynamic pressure, lift-to-drag ratio, wing loading, aspect ratio, Reynolds number |
-| **Flight performance** | Thrust-to-weight ratio, power-to-weight ratio, stall speed, rate of climb |
-| **Drones** | Total thrust, thrust-to-weight ratio, hover thrust per motor, flight-time estimate, electrical power, battery energy |
+| **Flight performance** | Thrust-to-weight, power-to-weight, stall speed, rate of climb, glide performance |
+| **Drones** | Total thrust, thrust-to-weight, hover thrust per motor, flight-time estimate, electrical power, battery energy |
+| **Propulsion** | Momentum theory, hover power & endurance, motor constants (Kv/Kt), rocket equation |
 | **Mechanical** | F = ma, torque, work, power, momentum, kinetic energy, potential energy, mechanical advantage, gear ratio |
 | **Rotational mechanics** | RPM → rad/s, rotational power, centripetal force, moment of inertia (7 shapes), rotational kinetic energy |
-| **Materials** | Normal stress, strain, Young's modulus, factor of safety (yield or ultimate), density, specific strength |
-| **Electrical / robotics** | Ohm's law (solve for any variable), power (three forms), series and parallel resistance, battery energy |
-| **Control systems** | Control error, PID simulator with response graph and step-response metrics |
+| **Structures** | Second moment of area, beam bending (6 load cases), elastic constants |
+| **Materials** | Normal stress, strain, Young's modulus, factor of safety, density, specific strength |
+| **Robotics** | Differential drive, reflected inertia, servo torque, encoder resolution |
+| **Electrical / robotics** | Ohm's law, power (three forms), series and parallel resistance, battery energy |
+| **Control systems** | Control error, PID simulator, second-order response, Ziegler–Nichols tuning |
 | **Unit converter** | Length, velocity, mass, force, pressure, energy, power, temperature |
 | **Constants / reference** | Engineering constants, International Standard Atmosphere (0–20 km) |
 
-Graphs are available on lift, drag, dynamic pressure, stall speed, torque,
-rotational power, drone thrust-to-weight, flight time, and ISA properties. The
-PID page always plots its response.
+Graphs are **interactive** — hover for a readout anywhere on the curve, drag to
+pan, scroll to zoom — and follow light and dark automatically.
 
 ---
 
@@ -165,6 +175,9 @@ ascent/
 │   ├── aerodynamics.py
 │   ├── flight.py
 │   ├── drones.py
+│   ├── propulsion.py
+│   ├── robotics.py
+│   ├── structures.py
 │   ├── mechanical.py
 │   ├── rotational.py
 │   ├── materials.py
@@ -173,15 +186,24 @@ ascent/
 │   ├── units.py
 │   └── reference.py
 ├── utils/
+│   ├── spec.py             # Calculator / Field / Output - a page as data
+│   ├── render.py           # The one renderer that turns a spec into a page
+│   ├── theme.py            # Design tokens, light + dark, motion
+│   ├── charts.py           # Interactive Altair charts
+│   ├── palette.py          # Command palette search and ranking
+│   ├── settings.py         # User preferences, persisted as JSON
 │   ├── constants.py        # g, rho_0, p_0, ... each with a source note
 │   ├── validation.py       # ValidationError + positive/non_zero/in_range...
 │   ├── conversions.py      # Unit tables (SI base unit as the pivot)
 │   ├── formatting.py       # Significant-digit number formatting
-│   ├── plotting.py         # Matplotlib style + operating-point marker
+│   ├── plotting.py         # Matplotlib style, for the remaining custom plots
 │   └── ui.py               # Page scaffolding: header, inputs, result, notes
 └── tests/
-    ├── test_calculations.py  # Physics, hand-checked known values
-    └── test_app.py           # Renders every page headlessly
+    ├── test_calculations.py    # Physics, hand-checked known values
+    ├── test_rendered_values.py # Every page's headline number, end to end
+    ├── test_palette.py         # Command palette search and navigation
+    ├── test_settings.py        # Preferences and their effect on the app
+    └── test_app.py             # Renders every page headlessly
 ```
 
 ### How each calculator module is laid out
@@ -202,6 +224,10 @@ function. `app.py` collects those dicts into `CATEGORIES`.
 
 Copy the shape of an existing one — `calculators/aerodynamics.py` → `render_lift`
 is the reference example.
+
+A calculator is **data**, not layout code: you describe its inputs, equation
+and assumptions, and one renderer draws the page. Pages that need unusual
+controls can still take over with `render=`.
 
 **1. Write the calculation** (in the matching module, or a new one):
 
@@ -307,6 +333,11 @@ These are deliberate, and worth keeping if you extend the app:
 
 ## Roadmap
 
+- The remaining calculators from the v1.1 plan: drag polar, airspeed and
+  density altitude, electric range and endurance, battery voltage sag,
+  propeller advance ratio, turn performance.
+- Converting the last modules to declarative specs (37 of 68 are converted;
+  the rest work through a compatibility shim).
 - **Windows and Linux builds.** The calculators are pure Python and already
   run anywhere Streamlit does; only the native window needs porting.
 - Breguet range and endurance, once they can be given a page that makes their
