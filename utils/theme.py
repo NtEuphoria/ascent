@@ -32,8 +32,8 @@ LIGHT = {
     "border": "rgba(16,24,40,0.10)",
     "border-strong": "rgba(16,24,40,0.20)",
     "ink": "#161b22",
-    "ink-muted": "rgba(22,27,34,0.64)",
-    "ink-faint": "rgba(22,27,34,0.60)",   # 4.8:1 on white
+    "ink-muted": "rgba(22,27,34,0.74)",
+    "ink-faint": "rgba(22,27,34,0.62)",   # see tests/test_design.py
     "accent": "#1f4e79",
     "accent-ink": "#1f4e79",
     "accent-soft": "rgba(31,78,121,0.07)",
@@ -43,6 +43,7 @@ LIGHT = {
     "danger": "#b3261e",
     "danger-soft": "rgba(179,38,30,0.07)",
     "grid": "#dfe4ec",
+    "edge": "rgba(255,255,255,0.90)",
     "shadow": "0 1px 2px rgba(16,24,40,0.04), 0 2px 8px rgba(16,24,40,0.06)",
     "shadow-lift": "0 2px 4px rgba(16,24,40,0.06), 0 8px 24px rgba(16,24,40,0.10)",
 }
@@ -69,6 +70,7 @@ DARK = {
     "danger": "#ff6b60",
     "danger-soft": "rgba(255,107,96,0.10)",
     "grid": "rgba(255,255,255,0.08)",
+    "edge": "rgba(255,255,255,0.055)",
     "shadow": "0 0 0 1px rgba(255,255,255,0.04)",
     "shadow-lift": "0 0 0 1px rgba(255,255,255,0.08), 0 12px 32px rgba(0,0,0,0.45)",
 }
@@ -157,6 +159,14 @@ SCALE = {
     # Space - 4px grid
     "s1": "4px", "s2": "8px", "s3": "12px", "s4": "16px",
     "s5": "24px", "s6": "32px", "s7": "48px",
+    # Families. No webfonts: the app must work offline, and macOS already
+    # ships the two faces this needs. Numbers get a true monospace because
+    # this is an instrument whose entire output is figures - digits that
+    # shift width as a value changes read as unstable.
+    "font-ui": ('-apple-system, BlinkMacSystemFont, "SF Pro Text", '
+                '"Helvetica Neue", sans-serif'),
+    "font-num": ('ui-monospace, "SF Mono", SFMono-Regular, Menlo, '
+                 'monospace'),
     # Shape
     "r-sm": "6px", "r-md": "10px", "r-lg": "14px",
     # Motion - referenced by every animation in the app
@@ -232,6 +242,14 @@ html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]{
   border:1px solid var(--a-border-strong)!important;}
 [data-testid="stRadio"] label:has(input:not(:checked)) > div:first-child > div{
   background-color:transparent!important;}
+
+/* A checkbox leaks the same way, and worse: the box keeps the fill of the
+   mode we are overriding away from, so on a light page "Show graph" is a
+   solid black square whose tick is white-on-white when you check it. Base Web
+   puts the box in the first span of the label, before the input. */
+[data-testid="stCheckbox"] label[data-baseweb="checkbox"] > span:first-child{
+  background-color:var(--a-surface)!important;
+  border-color:var(--a-border-strong)!important;}
 """
 
 _MOTION_OVERRIDES = {
@@ -284,55 +302,82 @@ _COMPONENTS = """
 .block-container{max-width:1180px;padding-top:var(--a-s5);
   padding-bottom:var(--a-s7);}
 
+/* A checked box is the one piece of Streamlit chrome that paints its own
+   brand colour. Left alone it is #FF4B4B, so the app is blue everywhere
+   except the control the user just clicked. This has to live outside the
+   forced-mode override: in "Follow system" that block never runs. */
+[data-testid="stCheckbox"]
+  label[data-baseweb="checkbox"]:has(input:checked) > span:first-child{
+  background-color:var(--a-accent)!important;
+  border-color:var(--a-accent)!important;}
+
 /* ---- App header ---- */
-.a-title{font-size:var(--a-t-xl);font-weight:700;letter-spacing:0.08em;
-  color:var(--a-accent-ink);margin:0 0 2px 0;line-height:1.1;}
-.a-spine{font-size:var(--a-t-xs);font-weight:600;letter-spacing:0.1em;
-  text-transform:uppercase;color:var(--a-ink-faint);margin:0 0 var(--a-s2) 0;}
+/* The mark appears in the app, not only on the icon. Drawn inline so it takes
+   the accent colour and needs no asset to load. */
+.a-brand{display:flex;align-items:center;gap:var(--a-s3);
+  margin:0 0 var(--a-s1) 0;}
+.a-brand svg{width:22px;height:22px;flex:none;display:block;}
+.a-brand svg path{fill:var(--a-accent);}
+.a-title{font-size:var(--a-t-xl);font-weight:680;letter-spacing:0.11em;
+  color:var(--a-accent-ink);margin:0;line-height:1;
+  font-family:var(--a-font-ui);}
+.a-spine{font-size:var(--a-t-xs);font-weight:450;letter-spacing:0.055em;
+  color:var(--a-ink-faint);margin:0 0 var(--a-s2) 0;}
+.a-spine b{color:var(--a-accent-ink);font-weight:680;}
 .a-sub{font-size:var(--a-t-base);color:var(--a-ink-muted);margin:0;
-  line-height:1.5;}
+  line-height:1.5;max-width:72ch;}
 
 /* ---- Calculator page ---- */
+.a-crumb{font-size:var(--a-t-xs);color:var(--a-ink-faint);
+  margin:0 0 2px 0;letter-spacing:0.02em;}
 .a-calc-title{font-size:var(--a-t-lg);font-weight:640;color:var(--a-ink);
-  margin:0;letter-spacing:-0.01em;}
+  margin:0;letter-spacing:-0.015em;text-wrap:balance;}
 .a-note{font-size:var(--a-t-base);color:var(--a-ink-muted);line-height:1.65;
   max-width:72ch;text-wrap:pretty;}
-.a-sub{max-width:72ch;}
-ul.a-tight li{max-width:88ch;}
-/* A hairline and a sentence-case label, rather than a tracked upper-case
-   kicker repeated above every block. */
 .a-label{display:flex;align-items:center;gap:var(--a-s3);
   font-size:var(--a-t-sm);color:var(--a-ink-muted);font-weight:560;
   margin:var(--a-s5) 0 var(--a-s2) 0;}
 .a-label::after{content:"";flex:1;height:1px;background:var(--a-border);}
 
-/* ---- Result card: the one thing the eye should land on ---- */
-/* No side stripe and no border-plus-wide-shadow: the surface tint and the
-   accent-coloured value carry the emphasis on their own. */
+/* The equation is the subject of the page, so it gets a surface of its own
+   rather than floating in the margin. */
+[data-testid="stMarkdownContainer"] .katex-display{
+  margin:var(--a-s4) 0!important;padding:var(--a-s4) var(--a-s5);
+  background:var(--a-raised);border:1px solid var(--a-border);
+  border-radius:var(--a-r-md);overflow-x:auto;overflow-y:hidden;
+  box-shadow:inset 0 1px 0 var(--a-edge);}
+
+/* ---- Result ---- */
+/* The one number the page exists to produce. Monospace and tabular so it
+   holds its shape while you type, with the unit clearly subordinate. */
 .a-result{border:1px solid var(--a-accent-line);
   border-radius:var(--a-r-md);padding:var(--a-s4) var(--a-s5) var(--a-s5);
   background:var(--a-accent-soft);
+  box-shadow:inset 0 1px 0 var(--a-edge);
   margin:var(--a-s1) 0 var(--a-s2) 0;
-  animation:a-result-in var(--a-d-slow) var(--a-ease-out) both;}
+  animation:a-rise var(--a-d-slow) var(--a-ease-expo) both;}
 .a-result-label{font-size:var(--a-t-sm);color:var(--a-ink-muted);
   font-weight:500;letter-spacing:0;}
-.a-result-value{font-size:var(--a-t-display);font-weight:640;line-height:1.15;
-  color:var(--a-ink);font-variant-numeric:tabular-nums;letter-spacing:-0.02em;
-  margin-top:2px;}
-.a-result-unit{font-size:var(--a-t-md);font-weight:500;color:var(--a-ink-muted);
-  margin-left:var(--a-s2);letter-spacing:0;}
-.a-sec{display:flex;flex-wrap:wrap;gap:var(--a-s5);margin-top:var(--a-s3);
-  padding-top:var(--a-s3);border-top:1px solid var(--a-accent-line);}
-.a-sec-k{font-size:var(--a-t-xs);color:var(--a-ink-faint);}
-.a-sec-v{font-size:var(--a-t-md);font-weight:580;color:var(--a-ink);
-  font-variant-numeric:tabular-nums;}
-.a-sec-u{font-size:var(--a-t-sm);font-weight:400;color:var(--a-ink-muted);}
+.a-result-value{font-family:var(--a-font-num);
+  font-size:var(--a-t-display);font-weight:600;line-height:1.1;
+  color:var(--a-ink);font-variant-numeric:tabular-nums;
+  letter-spacing:-0.025em;margin-top:var(--a-s1);
+  display:flex;align-items:baseline;gap:var(--a-s2);flex-wrap:wrap;}
+.a-result-unit{font-family:var(--a-font-ui);font-size:var(--a-t-md);
+  font-weight:500;color:var(--a-ink-muted);margin:0;letter-spacing:0;}
 
-/* The value re-renders on every input change, so this fires naturally as a
-   change cue rather than needing to be triggered. */
-@keyframes a-result-in{
-  from{opacity:0;transform:translateY(4px);}
-  to{opacity:1;transform:none;}}
+/* Supporting values line up on a grid, not a wrapped row of odd gaps. */
+.a-sec{display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(150px,1fr));
+  gap:var(--a-s3) var(--a-s5);margin-top:var(--a-s4);
+  padding-top:var(--a-s3);border-top:1px solid var(--a-accent-line);}
+.a-sec-k{font-size:var(--a-t-xs);color:var(--a-ink-faint);
+  margin-bottom:1px;}
+.a-sec-v{font-family:var(--a-font-num);font-size:var(--a-t-md);
+  font-weight:550;color:var(--a-ink);font-variant-numeric:tabular-nums;
+  letter-spacing:-0.01em;}
+.a-sec-u{font-family:var(--a-font-ui);font-size:var(--a-t-sm);
+  font-weight:400;color:var(--a-ink-muted);letter-spacing:0;}
 
 /* ---- Lists ---- */
 ul.a-tight{margin:2px 0 0 0;padding-left:var(--a-s4);
@@ -341,7 +386,8 @@ ul.a-tight li{margin-bottom:2px;}
 
 /* ---- Inputs: considered states, on nodes Streamlit reuses across reruns ---- */
 [data-testid="stNumberInput"] input,[data-testid="stNumberInputField"]{
-  font-variant-numeric:tabular-nums;
+  font-family:var(--a-font-num);font-variant-numeric:tabular-nums;
+  letter-spacing:-0.01em;
   transition:border-color var(--a-d-base) var(--a-ease),
              box-shadow var(--a-d-base) var(--a-ease);}
 [data-testid="stNumberInput"]:hover{--a-hover:1;}
@@ -352,6 +398,8 @@ ul.a-tight li{margin-bottom:2px;}
 
 /* ---- Tables ---- */
 .stMarkdown table{font-size:var(--a-t-sm);border-collapse:collapse;}
+.stMarkdown table td:last-child{font-family:var(--a-font-num);
+  font-variant-numeric:tabular-nums;color:var(--a-ink-muted);}
 .stMarkdown table td,.stMarkdown table th{
   border-color:var(--a-border)!important;padding:6px 10px;}
 .stMarkdown table th{color:var(--a-ink-muted);font-weight:600;
@@ -669,6 +717,16 @@ button[kind="pillsActive"],
 """
 
 
+def stylesheet(appearance: str = "Follow system", motion: str = "Full",
+               accent: str = "Blue", density: str = "Comfortable") -> str:
+    """The complete sheet the page receives, tokens first then components.
+
+    Separate from `inject` so a test can assert on exactly what ships rather
+    than reassembling the pieces itself and drifting from the real order.
+    """
+    return _tokens(appearance, motion, accent, density) + _COMPONENTS
+
+
 def inject(appearance: str = "Follow system", motion: str = "Full",
            accent: str = "Blue", density: str = "Comfortable") -> None:
     """Emit the stylesheet for the chosen appearance and motion level.
@@ -677,5 +735,4 @@ def inject(appearance: str = "Follow system", motion: str = "Full",
     costs no slot in the page layout - unlike `st.markdown`, which creates a
     real (empty) element that participates in index-based reconciliation.
     """
-    st.html(f"<style>{_tokens(appearance, motion, accent, density)}"
-            f"{_COMPONENTS}</style>")
+    st.html(f"<style>{stylesheet(appearance, motion, accent, density)}</style>")

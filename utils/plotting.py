@@ -45,16 +45,46 @@ def new_figure(rows: int = 1, height: float = 3.1):
 
 
 def mark_point(ax, x: float, y: float, label: str) -> None:
-    """Highlight the user's current operating point on a curve."""
+    """Highlight the user's current operating point on a curve.
+
+    The label is placed away from whichever edge the point is nearest. Always
+    putting it up-and-right reads fine mid-curve and badly at the corners: at
+    the ISA page's default altitude of 0 m the point sits top-left, and the
+    label lands on top of the chart title.
+    """
     ax.plot([x], [y], "o", color=ACCENT, markersize=6, zorder=5)
+    fx, fy = _axes_fraction(ax, x, y)
+    dx, ha = (-7, "right") if fx > 0.80 else (7, "left")
+    dy, va = (-9, "top") if fy > 0.78 else (9, "bottom")
     ax.annotate(
         label,
         xy=(x, y),
-        xytext=(6, 8),
+        xytext=(dx, dy),
         textcoords="offset points",
         fontsize=9,
         color=ACCENT,
+        ha=ha,
+        va=va,
+        zorder=6,
     )
+
+
+def _axes_fraction(ax, x: float, y: float):
+    """Where a data point falls in the axes box, 0-1 from bottom left.
+
+    Routed through transData rather than transLimits so log axes - which the
+    gear-ratio and power-loading sweeps use - are placed correctly too.
+    """
+    try:
+        # Limits are only recomputed at draw time, and mark_point is called
+        # immediately after plotting - without this the transform still holds
+        # the default 0-1 box and every point looks like it is off the top
+        # right corner.
+        ax.autoscale_view()
+        return tuple(ax.transAxes.inverted().transform(
+            ax.transData.transform((x, y))))
+    except (ValueError, TypeError):
+        return (0.0, 0.0)  # degenerate axes: fall back to the old placement
 
 
 def show(fig) -> None:

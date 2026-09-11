@@ -37,10 +37,26 @@ def inject_css(prefs=None) -> None:
                  prefs.get("density", "Comfortable"))
 
 
+# The dart, in SVG's downward y. These are the four points macos/main.swift
+# strokes on the splash and the icon is cut from - one shape in three places,
+# so the app you launch and the app you land in are recognisably the same.
+MARK = ('<svg viewBox="0 0 1024 1024" aria-hidden="true">'
+        '<path d="M512 212 L806 788 L512 644 L218 788 Z"/></svg>')
+
+
+def _spell(acronym: str) -> str:
+    """Accent the initial of each word so the expansion spells the name."""
+    words = [w.strip() for w in acronym.split("\u00b7")]
+    return " \u00b7 ".join(f"<b>{w[:1]}</b>{w[1:]}" for w in words if w)
+
+
 def app_header(title: str, acronym: str, subtitle: str) -> None:
     """Name, what the name stands for, then what the app does."""
-    st.markdown(f'<div class="a-title">{title}</div>', unsafe_allow_html=True)
-    st.markdown(f'<div class="a-spine">{acronym}</div>', unsafe_allow_html=True)
+    st.markdown(f'<div class="a-brand">{MARK}'
+                f'<div class="a-title">{title}</div></div>',
+                unsafe_allow_html=True)
+    st.markdown(f'<div class="a-spine">{_spell(acronym)}</div>',
+                unsafe_allow_html=True)
     st.markdown(f'<div class="a-sub">{subtitle}</div>', unsafe_allow_html=True)
     st.divider()
 

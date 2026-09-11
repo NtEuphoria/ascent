@@ -5,6 +5,7 @@ these catch layout errors, bad widget arguments, broken imports and plotting
 failures that a pure-function test cannot see.
 """
 import os
+import re
 import sys
 
 import pytest
@@ -40,7 +41,10 @@ def test_app_starts_without_error():
     assert not at.exception
     rendered = " ".join(block.value for block in at.markdown)
     assert "ASCENT" in rendered
-    assert "Aerospace" in rendered and "Structures" in rendered
+    # The spine wraps each initial in <b> so the acronym reads out of it, so
+    # compare on the text a reader actually sees.
+    text = re.sub(r"<[^>]+>", "", rendered)
+    assert "Aerospace" in text and "Structures" in text
 
 
 @pytest.mark.parametrize("category", list(CATEGORIES.keys()))
