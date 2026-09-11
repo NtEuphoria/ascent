@@ -166,6 +166,8 @@ SCALE = {
     "d-slower": "360ms",
     "ease": "cubic-bezier(.2,.7,.3,1)",
     "ease-out": "cubic-bezier(.16,1,.3,1)",
+    "ease-quart": "cubic-bezier(.25,1,.5,1)",     # snappy, for press feedback
+    "ease-expo": "cubic-bezier(.16,1,.3,1)",      # long tail, for entrances
 }
 
 
@@ -355,8 +357,121 @@ ul.a-tight li{margin-bottom:2px;}
 .stMarkdown table th{color:var(--a-ink-muted);font-weight:600;
   font-size:var(--a-t-xs);}
 
-/* ---- Entrance ---- */
+/* ======================================================================
+   MOTION
+   Every duration below resolves through the --a-d-* tokens, so the Motion
+   setting (Full / Reduced / None) and the system's Reduce Motion preference
+   both govern all of it from one place.
+
+   Entrances animate from a visible default rather than gating visibility on a
+   class: if an animation never fires - a headless render, a hidden tab - the
+   content must still be there.
+   ====================================================================== */
+
 @keyframes a-rise{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:none;}}
+@keyframes a-fade{from{opacity:0;}to{opacity:1;}}
+@keyframes a-mark-in{from{transform:scale(.35);opacity:.3;}
+  to{transform:scale(1);opacity:1;}}
+@keyframes a-value-in{from{opacity:.3;transform:translateY(3px);}
+  to{opacity:1;transform:none;}}
+
+/* ---- Press feedback -------------------------------------------------- */
+/* Buttons take a real press: a small scale under the finger, released on a
+   quart curve so it feels mechanical rather than rubbery. */
+[data-testid="stButton"] button,[data-testid="stPopover"] button{
+  transition:background-color var(--a-d-base) var(--a-ease),
+             border-color var(--a-d-base) var(--a-ease),
+             color var(--a-d-base) var(--a-ease),
+             box-shadow var(--a-d-base) var(--a-ease),
+             transform var(--a-d-fast) var(--a-ease-quart);}
+[data-testid="stButton"] button:active,
+[data-testid="stPopover"] button:active{transform:scale(.972);}
+[data-testid="stButton"] button:focus-visible,
+[data-testid="stPopover"] button:focus-visible{
+  outline:none;box-shadow:0 0 0 3px var(--a-accent-soft),
+  0 0 0 1px var(--a-accent);}
+
+/* The favourite star earns a little more: it is a moment of intent. */
+[class*="st-key-fav--"] button{
+  transition:color var(--a-d-base) var(--a-ease),
+             background-color var(--a-d-base) var(--a-ease),
+             transform var(--a-d-base) var(--a-ease-quart);}
+[class*="st-key-fav--"] button:hover{transform:scale(1.14) rotate(-6deg);}
+[class*="st-key-fav--"] button:active{transform:scale(.9);}
+
+/* ---- Selection ------------------------------------------------------- */
+/* The chosen marker scales in rather than appearing, so the eye can follow
+   which option took the selection. */
+[data-testid="stRadio"] label:has(input:checked) > div:first-child > div{
+  animation:a-mark-in var(--a-d-base) var(--a-ease-quart);}
+[data-testid="stRadio"] label{
+  transition:background-color var(--a-d-fast) var(--a-ease),
+             color var(--a-d-fast) var(--a-ease);}
+
+/* Toggles and checkboxes: the track colour and the knob travel together. */
+[data-testid="stCheckbox"] [data-baseweb="checkbox"] div,
+[data-testid="stCheckbox"] [role="checkbox"],
+[data-testid="stCheckbox"] [role="switch"] *{
+  transition:background-color var(--a-d-base) var(--a-ease),
+             transform var(--a-d-base) var(--a-ease-quart),
+             border-color var(--a-d-base) var(--a-ease)!important;}
+
+/* Segmented controls and tabs slide their selection. */
+button[kind="segmented_controlActive"],button[kind="pillsActive"],
+button[kind="segmented_control"],button[kind="pills"]{
+  transition:background-color var(--a-d-base) var(--a-ease),
+             color var(--a-d-base) var(--a-ease),
+             border-color var(--a-d-base) var(--a-ease);}
+[data-baseweb="tab-highlight"]{
+  transition:all var(--a-d-slow) var(--a-ease-expo)!important;}
+
+/* ---- The result ------------------------------------------------------ */
+/* The card rises in when the page opens; the value itself re-animates on
+   every change, which doubles as the "this number just updated" cue. */
+.a-result{animation:a-rise var(--a-d-slow) var(--a-ease-expo) both;}
+.a-result-value{animation:a-value-in var(--a-d-slow) var(--a-ease-expo);}
+.a-sec > div{animation:a-fade var(--a-d-slower) var(--a-ease-expo) both;}
+.a-sec > div:nth-child(2){animation-delay:40ms;}
+.a-sec > div:nth-child(3){animation-delay:80ms;}
+.a-sec > div:nth-child(4){animation-delay:120ms;}
+
+/* Assumptions arrive as a list, so they stagger as a list. */
+ul.a-tight li{animation:a-fade var(--a-d-slow) var(--a-ease-expo) both;}
+ul.a-tight li:nth-child(2){animation-delay:35ms;}
+ul.a-tight li:nth-child(3){animation-delay:70ms;}
+ul.a-tight li:nth-child(4){animation-delay:105ms;}
+ul.a-tight li:nth-child(5){animation-delay:140ms;}
+ul.a-tight li:nth-child(n+6){animation-delay:175ms;}
+
+/* ---- Overlays -------------------------------------------------------- */
+/* @starting-style defines where the entrance begins without ever hiding the
+   element by default - so a frame that never animates still shows content. */
+[data-testid="stDialog"] > div,[data-baseweb="popover"] > div{
+  transition:opacity var(--a-d-slow) var(--a-ease-expo),
+             transform var(--a-d-slow) var(--a-ease-expo);}
+@starting-style{
+  [data-testid="stDialog"] > div{opacity:0;transform:translateY(10px) scale(.985);}
+  [data-baseweb="popover"] > div{opacity:0;transform:translateY(-4px);}
+}
+
+/* ---- Inputs ---------------------------------------------------------- */
+[data-testid="stNumberInputStepUp"],[data-testid="stNumberInputStepDown"]{
+  transition:opacity var(--a-d-base) var(--a-ease),
+             background-color var(--a-d-fast) var(--a-ease);}
+
+/* ---- Charts ---------------------------------------------------------- */
+[data-testid="stVegaLiteChart"],[data-testid="stImage"]{
+  animation:a-fade var(--a-d-slower) var(--a-ease-expo) both;}
+
+/* Sidebar destinations feel like a list you move through. */
+[data-testid="stSidebar"] [class*="st-key-fav"] button,
+[data-testid="stSidebar"] [class*="st-key-rec"] button{
+  transition:color var(--a-d-fast) var(--a-ease),
+             background-color var(--a-d-fast) var(--a-ease),
+             padding-left var(--a-d-base) var(--a-ease-quart);}
+[data-testid="stSidebar"] [class*="st-key-fav"] button:hover,
+[data-testid="stSidebar"] [class*="st-key-rec"] button:hover{
+  padding-left:var(--a-s3);}
 
 /* ---- Widget chrome ----------------------------------------------------
    Streamlit's [theme] config keys (baseRadius, showWidgetBorder, primaryColor)
@@ -442,25 +557,59 @@ button[kind="pillsActive"],
 [role="tab"]{color:var(--a-ink-muted)!important;}
 [role="tab"]:hover{color:var(--a-ink)!important;}
 
-/* Sidebar quick links ----------------------------------------------------
-   Favourites and recents read as a list of destinations, not a stack of
-   buttons: left-aligned, borderless, and quiet until hovered. */
-.a-sidebar-heading{font-size:var(--a-t-xs);color:var(--a-ink-faint);
-  font-weight:600;margin:var(--a-s4) 0 var(--a-s1) 0;}
-[data-testid="stSidebar"] .st-key-fav\:\:,
-[data-testid="stSidebar"] [class*="st-key-fav"] button,
-[data-testid="stSidebar"] [class*="st-key-rec"] button{
-  justify-content:flex-start;text-align:left;border-color:transparent;
+/* Sidebar ----------------------------------------------------------------
+   Streamlit gives every button full padding and every block a 1rem gap, which
+   turned six recent items into a screenful of mostly nothing. Quick links are
+   single-line rows in a collapsed group; the section headings carry a count so
+   the panel reads as structure rather than a stack of identical pills. */
+
+[data-testid="stSidebar"] [data-testid="stVerticalBlock"]{gap:0.4rem;}
+[data-testid="stSidebarUserContent"]{padding-top:var(--a-s2);}
+
+.a-side-head{display:flex;align-items:baseline;justify-content:space-between;
+  font-size:var(--a-t-xs);font-weight:600;color:var(--a-ink-faint);
+  margin:var(--a-s4) 0 var(--a-s1) 0;padding:0 var(--a-s1);
+  border-bottom:1px solid var(--a-border);padding-bottom:var(--a-s1);}
+.a-side-head span{font-weight:500;font-variant-numeric:tabular-nums;
+  opacity:.75;}
+
+/* Collapse the group so rows sit directly under one another. */
+[class*="st-key-quick_"] [data-testid="stVerticalBlock"]{gap:0!important;}
+[class*="st-key-quick_"] [data-testid="stElementContainer"]{margin:0!important;}
+
+[data-testid="stSidebar"] [class*="st-key-fav--"] button,
+[data-testid="stSidebar"] [class*="st-key-rec--"] button{
+  justify-content:flex-start;text-align:left;border:none;
   background:transparent;font-weight:500;font-size:var(--a-t-sm);
-  color:var(--a-ink-muted);padding-top:2px;padding-bottom:2px;}
-[data-testid="stSidebar"] [class*="st-key-fav"] button:hover,
-[data-testid="stSidebar"] [class*="st-key-rec"] button:hover{
+  color:var(--a-ink-muted);min-height:0;height:auto;
+  padding:5px var(--a-s2);border-radius:var(--a-r-sm);
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+[data-testid="stSidebar"] [class*="st-key-fav--"] button:hover,
+[data-testid="stSidebar"] [class*="st-key-rec--"] button:hover{
   color:var(--a-accent-ink);background:var(--a-accent-soft);}
 
+/* Search reads as a field, not a button. */
+.st-key-palette_open_visible button{
+  justify-content:flex-start;color:var(--a-ink-faint);
+  font-size:var(--a-t-sm);font-weight:450;
+  border:1px solid var(--a-border);background:var(--a-surface);
+  padding:6px var(--a-s3);min-height:0;}
+.st-key-palette_open_visible button:hover{
+  color:var(--a-ink-muted);border-color:var(--a-border-strong);}
+
+/* The equation list is the working surface: tighter, with a clear current row. */
+[data-testid="stSidebar"] [data-testid="stRadio"] label{
+  padding:3px var(--a-s2);margin:0;font-size:var(--a-t-sm);}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked){
+  background:var(--a-accent-soft);}
+[data-testid="stSidebar"] [data-testid="stRadio"] label:has(input:checked) p{
+  color:var(--a-accent-ink)!important;font-weight:560;}
+[data-testid="stSidebar"] [data-testid="stWidgetLabel"]{display:none;}
+
 /* The favourite star sits in the page header beside Reset. */
-[class*="st-key-fav\:\:"] button{border-color:transparent;
+[class*="st-key-fav--"] button{border-color:transparent;
   background:transparent;font-size:1.05rem;color:var(--a-ink-faint);}
-[class*="st-key-fav\:\:"] button:hover{color:var(--a-warning);
+[class*="st-key-fav--"] button:hover{color:var(--a-warning);
   background:var(--a-accent-soft);}
 
 /* Sidebar show/hide ------------------------------------------------------

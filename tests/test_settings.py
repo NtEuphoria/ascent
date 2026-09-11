@@ -303,3 +303,64 @@ def test_thousands_separator_setting():
     set_thousands_separator(False)
     assert format_number(12403.125) == "12403"
     set_thousands_separator(True)          # restore for other tests
+
+
+# --------------------------------------------------------------------------
+# Motion
+# --------------------------------------------------------------------------
+def _effective(css, token):
+    """The value a browser would use: last declaration outside any @media."""
+    import re
+    outside = re.sub(r"@media[^{]*\{(?:[^{}]|\{[^{}]*\})*\}", "", css)
+    values = re.findall(rf"--a-{token}:([^;]+);", outside)
+    return values[-1] if values else None
+
+
+def test_motion_setting_scales_the_whole_system():
+    """One setting has to govern every animation, not a subset."""
+    from utils import theme
+    assert _effective(theme._tokens("Light", "Full"), "d-slow") == "220ms"
+    assert _effective(theme._tokens("Light", "Reduced"), "d-slow") == "110ms"
+    assert _effective(theme._tokens("Light", "None"), "d-slow") == "0ms"
+
+
+def test_system_reduce_motion_overrides_the_app_setting():
+    """Someone who asked their machine to calm down gets no motion, period."""
+    from utils import theme
+    for choice in ("Full", "Reduced", "None"):
+        css = theme._tokens("Light", choice)
+        tail = css.split("prefers-reduced-motion")[-1]
+        assert "--a-d-slow:0ms" in tail
+        assert "--a-d-base:0ms" in tail
+
+
+def test_no_animation_bypasses_the_duration_tokens():
+    """A hardcoded duration is an animation the Motion setting cannot stop."""
+    import re
+    from utils import theme
+    declarations = re.findall(r"(?:transition|animation):[^;]*;",
+                              theme._COMPONENTS)
+    hardcoded = [d for d in declarations
+                 if re.search(r"\b\d+m?s\b", d) and "var(--a-d" not in d]
+    assert not hardcoded, f"these bypass the motion setting: {hardcoded[:3]}"
+
+
+def test_entrances_never_gate_visibility_on_an_animation():
+    """If a frame never animates, the content still has to be there.
+
+    A keyframe may start from opacity 0 - that is the animation. What must not
+    exist is a plain rule leaving an element invisible at rest, waiting for an
+    animation that might never fire.
+    """
+    import re
+    from utils import theme
+
+    body = theme._COMPONENTS
+    # Remove whole at-rule blocks, not just their names: the `from{opacity:0}`
+    # inside a keyframe is the animation, not a hidden element.
+    body = re.sub(r"@(?:keyframes|starting-style)[^{]*\{(?:[^{}]|\{[^{}]*\})*\}",
+                  "", body)
+    # opacity:0 exactly - not the 0.45 of a dimmed stepper.
+    risky = re.findall(r"[^{}]*\{[^{}]*opacity:0\s*[;}][^{}]*\}", body)
+    assert not risky, f"content hidden at rest: {risky[:2]}"
+    assert "@starting-style" in theme._COMPONENTS

@@ -55,24 +55,27 @@ def all_calculators():
             for calc in normalise(entry, category)]
 
 
-def _quick_links(heading: str, slugs, by_slug, key_prefix: str) -> None:
+def _quick_links(heading: str, slugs, by_slug, key_prefix: str,
+                 marker: str = "", limit: int = 5) -> None:
     """A short list of one-click jumps at the top of the sidebar.
 
-    Favourites and recents are the two shortcuts that stop a growing catalogue
-    from making the common case slower - which is the whole risk of adding
-    calculators.
+    Favourites and recents are what stop a growing catalogue from making the
+    common case slower - which is the whole risk of adding calculators. They
+    only earn their space if they stay short and dense, so both are capped and
+    the rows are collapsed to a single line each.
     """
-    entries = [by_slug[slug] for slug in slugs if slug in by_slug]
+    entries = [by_slug[slug] for slug in slugs if slug in by_slug][:limit]
     if not entries:
         return
-    st.markdown(f'<div class="a-sidebar-heading">{heading}</div>',
-                unsafe_allow_html=True)
-    for category, calc in entries[:6]:
-        if st.button(calc.name, key=f"{key_prefix}::{calc.slug}",
-                     use_container_width=True, help=category):
-            st.session_state["nav_category"] = category
-            st.session_state[f"nav_equation::{category}"] = calc.name
-            st.rerun()
+    st.markdown(f'<div class="a-side-head">{heading}'
+                f'<span>{len(entries)}</span></div>', unsafe_allow_html=True)
+    with st.container(key=f"quick_{key_prefix}"):
+        for category, calc in entries:
+            if st.button(f"{marker}{calc.name}", key=f"{key_prefix}::{calc.slug}",
+                         use_container_width=True, help=category):
+                st.session_state["nav_category"] = category
+                st.session_state[f"nav_equation::{category}"] = calc.name
+                st.rerun()
 
 
 def main() -> None:
@@ -108,12 +111,14 @@ def main() -> None:
             palette.request_open()
             st.rerun()
 
-        _quick_links("Favourites", prefs.get("favourites", []), by_slug, "fav")
+        _quick_links("Favourites", prefs.get("favourites", []), by_slug,
+                     "fav", marker="★  ", limit=5)
         _quick_links("Recent", [slug for slug in prefs.get("recents", [])
                                 if slug not in prefs.get("favourites", [])],
-                     by_slug, "rec")
+                     by_slug, "rec", limit=4)
 
-        st.markdown("### Categories")
+        st.markdown('<div class="a-side-head">Browse</div>',
+                    unsafe_allow_html=True)
         category = st.selectbox("Category", list(CATEGORIES.keys()),
                                 key="nav_category", label_visibility="collapsed")
         calculators = normalise(CATEGORIES[category], category)
