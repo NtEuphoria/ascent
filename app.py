@@ -16,6 +16,7 @@ from calculators import (aerodynamics, controls, drones, electrical, flight,
                          robotics, rotational, units)
 from utils import palette
 from utils import render as renderer
+from utils import settings as user_settings
 from utils import ui
 from utils.spec import normalise
 
@@ -59,7 +60,8 @@ def main() -> None:
         layout="wide",
         initial_sidebar_state="expanded",
     )
-    ui.inject_css()
+    prefs = user_settings.load()
+    ui.inject_css(prefs)
 
     catalogue = all_calculators()
     palette.trigger(catalogue)          # hidden; the Cmd-K menu item clicks it
@@ -82,8 +84,17 @@ def main() -> None:
         st.divider()
         st.caption(ui.DISCLAIMER)
 
+        # Pinned to the bottom of the sidebar by CSS, where a settings entry is
+        # conventionally found.
+        if st.button("⚙  Settings", key="settings_open",
+                     use_container_width=True):
+            user_settings.request_open()
+            st.rerun()
+
+    user_settings.panel()
+
     ui.app_header(TITLE, ACRONYM, SUBTITLE)
-    renderer.render(by_name[name])
+    renderer.render(by_name[name], prefs)
 
 
 main()

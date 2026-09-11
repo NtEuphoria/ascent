@@ -110,19 +110,99 @@ def _block(palette) -> str:
     return "".join(f"--a-{name}:{value};" for name, value in palette.items())
 
 
-def _tokens() -> str:
+# Forcing a theme against the OS means Streamlit's own chrome - which follows
+# prefers-color-scheme and cannot be reconfigured at runtime - would otherwise
+# stay in the other mode. These rules put our tokens in charge of the surfaces
+# Streamlit paints itself, so "Dark" on a light Mac is actually dark.
+_CHROME_OVERRIDE = """
+.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]{
+  background:var(--a-bg)!important;}
+[data-testid="stSidebar"],[data-testid="stSidebarContent"]{
+  background:var(--a-raised)!important;}
+[data-testid="stHeader"]{background:transparent!important;}
+.stApp,.stMarkdown,.stMarkdown p,.stMarkdown li,.stMarkdown td,
+[data-testid="stWidgetLabel"] p,h1,h2,h3,h4{color:var(--a-ink)!important;}
+
+/* Widgets are the fiddly part. Streamlit styles these through Base Web with
+   its own light/dark values, which our token block does not reach - so
+   forcing only the page colours leaves dark fields with dark text on them.
+   Everything a widget paints has to be reclaimed explicitly. */
+.stApp input,.stApp textarea,[data-testid="stDialog"] input,
+.stApp [data-baseweb="input"],.stApp [data-baseweb="base-input"],
+.stApp [data-baseweb="select"] > div,
+[data-testid="stNumberInputContainer"],
+[data-testid="stDialog"] [data-baseweb="input"]{
+  background-color:var(--a-surface)!important;color:var(--a-ink)!important;}
+
+.stApp button,[data-testid="stDialog"] button{
+  background-color:var(--a-surface)!important;color:var(--a-ink)!important;
+  border-color:var(--a-border)!important;}
+/* The primary action keeps its accent - it should still read as the default. */
+.stApp button[kind="primary"],[data-testid="stDialog"] button[kind="primary"]{
+  background-color:var(--a-accent)!important;color:#ffffff!important;
+  border-color:var(--a-accent)!important;}
+
+[data-testid="stRadio"] label,[data-testid="stRadio"] p,
+[data-testid="stCheckbox"] label,[data-testid="stCheckbox"] p,
+[data-testid="stDialog"],[data-testid="stDialog"] p,
+[data-testid="stDialog"] label,[data-baseweb="popover"] li{
+  color:var(--a-ink)!important;}
+[data-testid="stDialog"],[data-baseweb="popover"] ul{
+  background-color:var(--a-surface)!important;}
+
+/* Stepper chevrons and the dropdown arrow are drawn as SVG. */
+[data-testid="stNumberInputStepUp"] svg,[data-testid="stNumberInputStepDown"] svg,
+.stApp [data-baseweb="select"] svg{fill:var(--a-ink-muted)!important;}
+
+[data-testid="stCaptionContainer"],[data-testid="stCaptionContainer"] p{
+  color:var(--a-ink-muted)!important;}
+
+/* An unselected radio keeps the fill from the mode we are overriding away
+   from, which shows as a solid dark disc on a light page. */
+[data-testid="stRadio"] label:has(input:not(:checked)) > div:first-child{
+  background-color:var(--a-surface)!important;
+  border:1px solid var(--a-border-strong)!important;}
+[data-testid="stRadio"] label:has(input:not(:checked)) > div:first-child > div{
+  background-color:transparent!important;}
+"""
+
+_MOTION_OVERRIDES = {
+    # Halved: still legible as motion, but out of the way.
+    "Reduced": ("--a-d-fast:40ms;--a-d-base:70ms;--a-d-slow:110ms;"
+                "--a-d-slower:160ms;"),
+    "None": "--a-d-fast:0ms;--a-d-base:0ms;--a-d-slow:0ms;--a-d-slower:0ms;",
+}
+
+
+def _tokens(appearance: str = "Follow system", motion: str = "Full") -> str:
+    """Build the token block for the chosen appearance.
+
+    The mode is baked in server-side rather than toggled with an attribute,
+    because the page cannot run JavaScript of its own - st.html strips both
+    <script> and inline handlers - so there is no way to set a data attribute
+    on the document at runtime.
+    """
     scale = "".join(f"--a-{name}:{value};" for name, value in SCALE.items())
-    return (
-        f":root{{{_block(LIGHT)}{scale}}}"
-        # Follows the OS, matching how Streamlit's own frontend decides.
-        f"@media (prefers-color-scheme: dark){{:root{{{_block(DARK)}}}}}"
-        # Manual override wins over the OS in both directions.
-        f':root[data-ascent-theme="light"]{{{_block(LIGHT)}}}'
-        f':root[data-ascent-theme="dark"]{{{_block(DARK)}}}'
-        # Anyone who has asked their system to calm down gets no motion.
-        "@media (prefers-reduced-motion: reduce){:root{"
-        "--a-d-fast:0ms;--a-d-base:0ms;--a-d-slow:0ms;--a-d-slower:0ms;}}"
-    )
+
+    if appearance == "Light":
+        css = f":root{{{_block(LIGHT)}{scale}}}" + _CHROME_OVERRIDE
+    elif appearance == "Dark":
+        css = f":root{{{_block(DARK)}{scale}}}" + _CHROME_OVERRIDE
+    else:
+        # Follow the OS, matching how Streamlit's own frontend decides, so the
+        # app chrome and our components cannot drift apart.
+        css = (f":root{{{_block(LIGHT)}{scale}}}"
+               f"@media (prefers-color-scheme: dark)"
+               f"{{:root{{{_block(DARK)}}}}}")
+
+    override = _MOTION_OVERRIDES.get(motion)
+    if override:
+        css += f":root{{{override}}}"
+
+    # The system preference always wins over the app's own motion setting.
+    css += ("@media (prefers-reduced-motion: reduce){:root{"
+            "--a-d-fast:0ms;--a-d-base:0ms;--a-d-slow:0ms;--a-d-slower:0ms;}}")
+    return css
 
 
 _COMPONENTS = """
@@ -249,6 +329,36 @@ html{font-size:15px;}
   background:var(--a-accent-soft);}
 [data-testid="stButton"] button:active{transform:translateY(1px);}
 
+/* Accent -----------------------------------------------------------------
+   config.toml cannot set primaryColor without pinning the app to one light or
+   dark mode, so Streamlit falls back to its default red for every selected
+   control. These rules put the ASCENT accent back. Selected and unselected
+   states are separated with :has(), which this WebKit supports. */
+/* Scoped to the marker itself: `label div div` also matches the wrapper that
+   holds the label text, which paints an accent block across the words. */
+/* Base Web fills the outer ring with the primary colour and nests a smaller
+   disc inside, so both have to be reclaimed or a red rim shows around the
+   accent dot. */
+[data-testid="stRadio"] label:has(input:checked) > div:first-child,
+[data-testid="stRadio"] label:has(input:checked) > div:first-child > div,
+[data-testid="stSlider"] [role="slider"]{
+  background-color:var(--a-accent)!important;
+  border-color:var(--a-accent)!important;}
+button[kind="primary"]{background-color:var(--a-accent)!important;
+  border-color:var(--a-accent)!important;color:#ffffff!important;}
+
+/* Settings lives at the bottom of the sidebar, where macOS apps, Claude and
+   ChatGPT all put it. The sidebar body becomes a flex column so the button can
+   be pushed down with margin-top:auto rather than guessed at with padding. */
+[data-testid="stSidebarUserContent"]{display:flex;flex-direction:column;
+  min-height:calc(100vh - 7rem);}
+.st-key-settings_open{margin-top:auto;padding-top:var(--a-s3);}
+.st-key-settings_open button{justify-content:flex-start;
+  color:var(--a-ink-muted);border-color:transparent;background:transparent;
+  font-size:var(--a-t-sm);}
+.st-key-settings_open button:hover{color:var(--a-accent-ink);
+  background:var(--a-accent-soft);border-color:var(--a-accent-line);}
+
 /* Command palette -------------------------------------------------------
    The trigger is moved off-screen rather than display:none, so the native
    Cmd-K menu item can still click it through evaluateJavaScript.          */
@@ -275,11 +385,11 @@ html{font-size:15px;}
 """
 
 
-def inject() -> None:
-    """Emit the stylesheet.
+def inject(appearance: str = "Follow system", motion: str = "Full") -> None:
+    """Emit the stylesheet for the chosen appearance and motion level.
 
     `st.html` routes style-only content to Streamlit's event container, so this
     costs no slot in the page layout - unlike `st.markdown`, which creates a
     real (empty) element that participates in index-based reconciliation.
     """
-    st.html(f"<style>{_tokens()}{_COMPONENTS}</style>")
+    st.html(f"<style>{_tokens(appearance, motion)}{_COMPONENTS}</style>")

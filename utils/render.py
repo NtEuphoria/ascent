@@ -135,20 +135,21 @@ def _draw_graph(calc: Calculator, values: Inputs, result: float) -> None:
     )
 
 
-def render(calc: Calculator) -> None:
+def render(calc: Calculator, prefs=None) -> None:
     """Draw a complete calculator page."""
     if calc.render is not None:          # imperative escape hatch
         calc.render()
         return
+    prefs = prefs or {}
 
     # The header is outside the fragment: it is static for a given calculator,
     # and Reset deliberately triggers a full rerun so every widget rebuilds.
     ui.page_header(calc.name, calc.latex, calc.explanation, calc.prefix)
-    _render_body(calc)
+    _render_body(calc, prefs)
 
 
 @st.fragment
-def _render_body(calc: Calculator) -> None:
+def _render_body(calc: Calculator, prefs: dict) -> None:
     """Inputs, result and graph - the part that reruns as you type.
 
     Without this, changing one number reruns the whole script: sidebar, every
@@ -181,9 +182,10 @@ def _render_body(calc: Calculator) -> None:
                 secondary.append((item.label, item.fn(values, result), item.unit))
             except (ValidationError, ZeroDivisionError, ValueError):
                 continue          # a supporting value is never worth an error
+        significant = prefs.get("significant_figures", calc.result.sig)
         with result_slot:
             ui.result(calc.result.label, result, calc.result.unit,
-                      secondary=secondary, sig=calc.result.sig)
+                      secondary=secondary, sig=significant)
         if calc.note is not None:
             caption = calc.note(values, result)
             if caption:
@@ -195,4 +197,5 @@ def _render_body(calc: Calculator) -> None:
         if result is not None:
             _draw_graph(calc, values, result)
 
-    ui.reference(calc.variables, calc.example)
+    if prefs.get("show_reference", True):
+        ui.reference(calc.variables, calc.example)

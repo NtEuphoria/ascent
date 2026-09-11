@@ -27,9 +27,11 @@ DISCLAIMER = (
     "Critical designs must be independently verified."
 )
 
-def inject_css() -> None:
+def inject_css(prefs=None) -> None:
     """Called once per rerun from app.py. Styling lives in utils/theme.py."""
-    theme.inject()
+    prefs = prefs or {}
+    theme.inject(prefs.get("appearance", "Follow system"),
+                 prefs.get("motion", "Full"))
 
 
 def app_header(title: str, acronym: str, subtitle: str) -> None:

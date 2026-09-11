@@ -5,7 +5,13 @@ import math
 
 
 def format_number(value: float, sig: int = 4) -> str:
-    """Format a number with `sig` significant digits, without noise digits.
+    """Format a number to at least `sig` significant digits.
+
+    `sig` sets how many DECIMALS are shown, and the whole-number part is never
+    truncated: 12403.125 stays "12,403" at any setting rather than rounding to
+    "12,400". That is deliberate for an engineering tool - discarding 403 N of
+    a real answer to satisfy a display preference would be worse than showing
+    an extra digit.
 
     Switches to scientific notation outside 1e-3 .. 1e6, which is where fixed
     notation stops being readable (e.g. viscosity or a Young's modulus in Pa).
