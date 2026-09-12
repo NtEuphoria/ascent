@@ -112,19 +112,22 @@ def _headline(app_root):
 
 def test_significant_figures_change_the_displayed_result(real_settings_file):
     """The setting must actually reach the rendered number."""
-    settings.save({"onboarded": True,
+    settings.save({"onboarded": True, "start_page": "Where I left off",
+                   "last_page": "aero.lift",
                    "appearance": "Follow system", "motion": "Full",
                    "significant_figures": 4, "show_reference": True})
     assert _headline(ROOT) == "12,403"
 
-    settings.save({"onboarded": True,
+    settings.save({"onboarded": True, "start_page": "Where I left off",
+                   "last_page": "aero.lift",
                    "appearance": "Follow system", "motion": "Full",
                    "significant_figures": 6, "show_reference": True})
     assert _headline(ROOT) == "12,403.1"
 
     # Whole numbers are never truncated, so a lower setting cannot turn
     # 12,403 into 12,400. It affects decimals, not real precision.
-    settings.save({"onboarded": True,
+    settings.save({"onboarded": True, "start_page": "Where I left off",
+                   "last_page": "aero.lift",
                    "appearance": "Follow system", "motion": "Full",
                    "significant_figures": 3, "show_reference": True})
     assert _headline(ROOT) == "12,403"
@@ -139,12 +142,14 @@ def test_reference_toggle_hides_the_reference_block(real_settings_file):
         at.run()
         return " ".join(block.value for block in at.markdown)
 
-    settings.save({"onboarded": True,
+    settings.save({"onboarded": True, "start_page": "Where I left off",
+                   "last_page": "aero.lift",
                    "appearance": "Follow system", "motion": "Full",
                    "significant_figures": 4, "show_reference": True})
     assert "Where this is used" in rendered()
 
-    settings.save({"onboarded": True,
+    settings.save({"onboarded": True, "start_page": "Where I left off",
+                   "last_page": "aero.lift",
                    "appearance": "Follow system", "motion": "Full",
                    "significant_figures": 4, "show_reference": False})
     shown = rendered()

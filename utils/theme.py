@@ -572,6 +572,43 @@ _COMPONENTS = """
 .a-ob-summary b{font-family:var(--a-font-num);font-size:var(--a-t-sm);
   font-weight:600;color:var(--a-ink);letter-spacing:-0.01em;}
 
+/* ---- Project ---- */
+/* A bound input is a fact, not a control. It reads as a value the page has
+   been given rather than one it is waiting for. */
+.a-bound{padding:6px 0 2px 0;}
+.a-bound-k{font-size:var(--a-t-sm);color:var(--a-ink-muted);
+  margin-bottom:3px;}
+.a-bound-v{font-family:var(--a-font-num);font-size:var(--a-t-md);
+  font-weight:600;color:var(--a-ink);font-variant-numeric:tabular-nums;
+  letter-spacing:-0.01em;display:flex;align-items:baseline;gap:var(--a-s2);}
+.a-bound-v span{font-family:var(--a-font-ui);font-size:var(--a-t-xs);
+  font-weight:450;color:var(--a-ink-faint);letter-spacing:0;}
+.a-bound-src{font-size:var(--a-t-xs);color:var(--a-accent-ink);margin-top:2px;}
+
+.a-param-k{font-size:var(--a-t-base);font-weight:560;color:var(--a-ink);}
+.a-param-v{font-family:var(--a-font-num);font-size:var(--a-t-md);
+  font-weight:600;color:var(--a-ink);font-variant-numeric:tabular-nums;
+  display:flex;align-items:baseline;gap:6px;}
+.a-param-v span{font-family:var(--a-font-ui);font-size:var(--a-t-xs);
+  font-weight:450;color:var(--a-ink-muted);}
+.a-param-src{font-size:var(--a-t-xs);color:var(--a-ink-faint);margin-top:1px;}
+
+.a-req{display:flex;align-items:baseline;gap:var(--a-s3);flex-wrap:wrap;
+  padding:var(--a-s2) 0;}
+.a-req-label{font-size:var(--a-t-base);color:var(--a-ink);font-weight:520;}
+.a-req-rule{font-size:var(--a-t-xs);color:var(--a-ink-faint);
+  font-family:var(--a-font-num);}
+
+/* Four states, four colours. "Not evaluated" is deliberately not a shade of
+   red or green - it is not a soft fail, it is an absence of evidence. */
+.a-badge{font-size:var(--a-t-xs);font-weight:600;padding:3px 9px;
+  border-radius:999px;white-space:nowrap;letter-spacing:0.01em;
+  animation:a-fade var(--a-d-slow) var(--a-ease-expo) both;}
+.a-badge.a-ok{background:rgba(26,127,75,0.14);color:var(--a-positive);}
+.a-badge.a-bad{background:var(--a-danger-soft);color:var(--a-danger);}
+.a-badge.a-warn{background:rgba(138,90,0,0.14);color:var(--a-warning);}
+.a-badge.a-unknown{background:var(--a-sunken);color:var(--a-ink-faint);}
+
 /* ---- Lists ---- */
 ul.a-tight{margin:2px 0 0 0;padding-left:var(--a-s4);
   font-size:var(--a-t-sm);color:var(--a-ink-muted);line-height:1.65;}

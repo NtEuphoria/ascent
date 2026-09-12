@@ -24,7 +24,8 @@ from typing import Any, Dict, List
 import numpy as np
 import streamlit as st
 
-from . import analysis, charts, navigate, settings, ui
+from . import analysis, charts, navigate, project as project_store
+from . import settings, ui
 from .formatting import format_number
 from .spec import Calculator, Field, Inputs, Sweep
 from .validation import ValidationError
@@ -42,9 +43,25 @@ def _layout_rows(fields: List[Field]) -> List[List[Field]]:
     return rows
 
 
-def _widget(field: Field, prefix: str) -> Any:
-    """Draw one input and return its value."""
+def _widget(field: Field, prefix: str, bound=None) -> Any:
+    """Draw one input and return its value.
+
+    A field bound to a project parameter is shown as a read-only figure rather
+    than a disabled box with a value in it. Letting it be edited locally would
+    reintroduce exactly the divergence the project exists to prevent - four
+    pages quietly carrying four different masses.
+    """
     key = f"{prefix}_{field.key}"
+    if bound is not None:
+        unit = f" {field.unit}" if field.unit else ""
+        st.markdown(
+            f'<div class="a-bound">'
+            f'<div class="a-bound-k">{field.label}{unit}</div>'
+            f'<div class="a-bound-v">{format_number(bound.value, 6)}'
+            f'<span>{bound.source.lower()}</span></div>'
+            f'<div class="a-bound-src">from project · {bound.label}</div>'
+            f'</div>', unsafe_allow_html=True)
+        return bound.value
     if field.widget is not None:
         return field.widget(key, field)
     if field.kind == "weight":
@@ -74,14 +91,17 @@ def _widget(field: Field, prefix: str) -> Any:
                      help=field.help)
 
 
-def collect_inputs(calc: Calculator) -> Inputs:
+def collect_inputs(calc: Calculator, project=None) -> Inputs:
     """Draw every input field and gather the values."""
+    project = project if project is not None else {"parameters": {},
+                                                   "bindings": {}}
     values: Dict[str, Any] = {}
     for row in _layout_rows(calc.inputs):
         columns = st.columns(len(row))
         for column, field in zip(columns, row):
             with column:
-                values[field.key] = _widget(field, calc.prefix)
+                bound = project_store.bound_value(project, calc.slug, field.key)
+                values[field.key] = _widget(field, calc.prefix, bound)
     return Inputs(values)
 
 
@@ -364,6 +384,62 @@ def render(calc: Calculator, prefs=None, catalogue=None) -> None:
     _render_body(calc, prefs, catalogue or {})
 
 
+def _link_panel(calc: Calculator, project: dict) -> None:
+    """Link this page's inputs to project parameters.
+
+    One collapsed control rather than a widget beside every field: on a page
+    with five inputs the per-field version triples the chrome, and linking is
+    something done once per project, not once per visit.
+    """
+    numeric = [f for f in calc.inputs
+               if f.kind in ("float", "int", "slider") and
+               project_store.compatible(project, f.unit)]
+    linked = sum(1 for f in calc.inputs
+                 if project_store.bound_value(project, calc.slug, f.key))
+    if not numeric and not linked:
+        return
+
+    label = (f"Project  ·  {linked} linked" if linked
+             else f"Project  ·  {len(numeric)} can be linked")
+    with st.popover(label, use_container_width=False):
+        st.markdown('<div class="a-note">A linked input takes its value from '
+                    'the project and cannot be edited here, so the same '
+                    'quantity cannot drift apart across pages.</div>',
+                    unsafe_allow_html=True)
+        # In a form, so several inputs can be linked in one go - a popover
+        # closes on every rerun, so a selectbox that applied immediately would
+        # shut the panel after each single change.
+        with st.form(f"link_{calc.prefix}", border=False):
+            changed = _link_fields(calc, project)
+            if st.form_submit_button("Apply", type="primary") and changed:
+                project_store.save(project)
+                st.rerun()
+
+
+def _link_fields(calc: Calculator, project: dict) -> bool:
+    changed = False
+    if True:
+        for spec_field in calc.inputs:
+            options = project_store.compatible(project, spec_field.unit)
+            current = project_store.bound_value(project, calc.slug,
+                                                spec_field.key)
+            if not options and not current:
+                continue
+            names = ["Not linked"] + [p.label for p in options]
+            index = (names.index(current.label)
+                     if current and current.label in names else 0)
+            chosen = st.selectbox(
+                f"{spec_field.label} [{spec_field.unit}]" if spec_field.unit
+                else spec_field.label,
+                names, index=index,
+                key=f"bind_{calc.prefix}_{spec_field.key}")
+            wanted = next((p.key for p in options if p.label == chosen), None)
+            if (current.key if current else None) != wanted:
+                project_store.bind(project, calc.slug, spec_field.key, wanted)
+                changed = True
+    return changed
+
+
 @st.fragment
 def _render_body(calc: Calculator, prefs: dict, catalogue: dict) -> None:
     """Inputs, result and graph - the part that reruns as you type.
@@ -375,7 +451,9 @@ def _render_body(calc: Calculator, prefs: dict, catalogue: dict) -> None:
     Inside a fragment only these elements re-execute and only these can go
     stale, which is what keeps an edit under the ~400ms that feels instant.
     """
-    values = collect_inputs(calc)
+    project = project_store.load()
+    _link_panel(calc, project)
+    values = collect_inputs(calc, project)
 
     # Reserved slots: these elements always exist, so nothing below them ever
     # shifts index and remounts. See the module docstring.

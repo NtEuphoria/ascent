@@ -28,6 +28,23 @@ import pytest  # noqa: E402
 from utils import settings  # noqa: E402
 
 
+@pytest.fixture(autouse=True)
+def clean_project():
+    """Every test starts with no project.
+
+    Without this, a test that saves parameters and bindings leaves them in the
+    shared store, and every later end-to-end render draws a different page -
+    bound inputs instead of number boxes, plus a link panel - which shifts
+    every widget index the app tests address by position.
+    """
+    path = os.path.join(_STORE, "project.json")
+    if os.path.exists(path):
+        os.remove(path)
+    yield
+    if os.path.exists(path):
+        os.remove(path)
+
+
 @pytest.fixture
 def real_settings_file():
     """Swap the app's real settings file, restoring it afterwards.

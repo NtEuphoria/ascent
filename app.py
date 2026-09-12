@@ -12,8 +12,9 @@ from __future__ import annotations
 import streamlit as st
 
 from calculators import (aerodynamics, controls, drones, electrical, flight,
-                         live, materials, mechanical, propulsion, reference,
-                         robotics, rotational, structures, units)
+                         live, materials, mechanical, project,
+                         propulsion, reference, robotics, rotational,
+                         structures, units)
 from utils import navigate, onboarding, palette
 from utils import render as renderer
 from utils import settings as user_settings
@@ -28,6 +29,9 @@ SUBTITLE = ("Interactive engineering calculators for aerospace, robotics, "
 
 # Sidebar category -> {menu label: render function}. Order is preserved.
 CATEGORIES = {
+    # First, because it is the thing the rest hangs off: a value defined here
+    # is the same value on every page that links it.
+    "Project": project.CALCULATORS,
     "Aerodynamics": aerodynamics.CALCULATORS,
     "Flight performance": flight.CALCULATORS,
     "Drones": drones.CALCULATORS,
@@ -159,4 +163,14 @@ def main() -> None:
     renderer.render(chosen, prefs, by_slug)
 
 
-main()
+# Guarded, so importing this module to read CATEGORIES does not also draw the
+# entire app. Streamlit runs the script with __name__ == "__main__", so this
+# still executes normally.
+#
+# It was unguarded until a form appeared on the default landing page. Running
+# main() at import time in bare mode left Streamlit's global form state open,
+# and every widget in the next real run then raised "st.button() can't be used
+# in an st.form()" - an import side effect that had simply never had anything
+# to break.
+if __name__ == "__main__":
+    main()
