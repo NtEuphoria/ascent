@@ -1,0 +1,15 @@
+{
+  "name": "ascent",
+  "description": "Agents and operating rules for working on ASCENT, the aerospace and robotics engineering toolkit",
+  "owner": {
+    "name": "NtEuphoria",
+    "url": "https://github.com/NtEuphoria/ascent"
+  },
+  "plugins": [
+    {
+      "name": "ascent-engineering",
+      "source": "./plugins/ascent-engineering",
+      "description": "Six specialist agents, the shared evidence rules, and the full 208-role catalogue as an on-demand reference"
+    }
+  ]
+}

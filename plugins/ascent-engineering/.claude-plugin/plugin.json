@@ -1,0 +1,21 @@
+{
+  "name": "ascent-engineering",
+  "version": "1.0.0",
+  "description": "Working agents for ASCENT: a calculator author, an independent physics verifier that never trusts the implementation, a page reviewer, a design reviewer, a live-data engineer, and a platform builder - plus the shared evidence discipline they all follow",
+  "author": {
+    "name": "NtEuphoria"
+  },
+  "repository": "https://github.com/NtEuphoria/ascent",
+  "license": "MIT",
+  "keywords": [
+    "engineering",
+    "aerospace",
+    "robotics",
+    "calculators",
+    "streamlit",
+    "verification",
+    "physics"
+  ],
+  "skills": ["./skills/"],
+  "commands": ["./commands/"]
+}
