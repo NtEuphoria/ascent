@@ -197,7 +197,13 @@ _LEVELS = {"info": st.info, "warning": st.warning, "danger": st.error}
 
 
 def _influence_table(calc: Calculator, values: Inputs, result: float) -> None:
-    """Which input actually drives this number, measured rather than asserted."""
+    """Which input actually drives this number, measured rather than asserted.
+
+    Drawn as real bars rather than a column of block characters in a markdown
+    table. The bar is the comparison - it is the whole reason the elasticities
+    are worth ranking - and a row of U+2588 in a monospace cell quantises it to
+    twelve steps and inherits the table's own alignment.
+    """
     ranked = analysis.influences(calc, values, result)
     usable = [item for item in ranked if item.usable]
     if not usable:
@@ -213,18 +219,35 @@ def _influence_table(calc: Calculator, values: Inputs, result: float) -> None:
         unsafe_allow_html=True)
 
     strongest = abs(usable[0].elasticity)
-    rows = ["| Input | Effect on the result | Strength |", "| --- | --- | --- |"]
-    for item in ranked:
+    rows = []
+    for position, item in enumerate(ranked):
+        # Stagger down the list so the ranking reads in order rather than
+        # arriving all at once. Capped so a page with many inputs does not
+        # turn its most useful table into a wait.
+        delay = f"{min(position, 7) * 45}ms"
         if not item.usable:
-            rows.append(f"| {item.label} | Not measurable here "
-                        f"({item.reason}) | |")
+            rows.append(
+                f'<li class="a-inf a-inf-off" style="--d:{delay}">'
+                f'<span class="a-inf-k">{item.label}</span>'
+                f'<span class="a-inf-v">not measurable</span>'
+                f'<span class="a-inf-bar"></span>'
+                f'<span class="a-inf-why">{item.reason}</span></li>')
             continue
         share = abs(item.elasticity) / strongest if strongest else 0.0
-        bar = "\u2588" * max(1, int(round(share * 12)))
         sign = "+" if item.elasticity >= 0 else "\u2212"
-        rows.append(f"| {item.label} | {sign}{abs(item.elasticity):.2f}% "
-                    f"per +1% | `{bar}` |")
-    st.markdown("\n".join(rows))
+        # A negative elasticity is not a smaller positive one - it moves the
+        # result the other way - so it gets its own colour rather than a
+        # shorter bar.
+        direction = "up" if item.elasticity >= 0 else "down"
+        rows.append(
+            f'<li class="a-inf" style="--d:{delay};--w:{share * 100:.1f}%">'
+            f'<span class="a-inf-k">{item.label}</span>'
+            f'<span class="a-inf-v">{sign}{abs(item.elasticity):.2f}%</span>'
+            f'<span class="a-inf-bar a-inf-{direction}"><i></i></span>'
+            f'<span class="a-inf-why">per +1% change</span></li>')
+
+    st.markdown(f'<ul class="a-inf-list">{"".join(rows)}</ul>',
+                unsafe_allow_html=True)
     st.caption(analysis.describe(usable[0]) + "  That makes "
                f"{usable[0].label} the input worth getting right first.")
 

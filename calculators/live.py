@@ -104,19 +104,103 @@ def _connection_panel() -> None:
         st.error(f"Could not read that port: {source.error}")
 
 
-def _readouts(source) -> None:
-    """One large number per channel, in the same face as every other result."""
+def _sparkline(series, width: int = 108, height: int = 26) -> str:
+    """An inline SVG trace of one channel's recent history.
+
+    Drawn as SVG rather than as another Altair chart because there is one of
+    these per channel, redrawn twice a second: a full chart spec each would
+    cost more to build than the whole rest of the page.
+    """
+    if len(series) < 2:
+        return ""
+    low, high = min(series), max(series)
+    span = high - low
+    if span <= 0:
+        # A flat channel is real data, not an error - draw it on the centre
+        # line rather than dividing by zero or hiding it.
+        points = " ".join(
+            f"{index / (len(series) - 1) * width:.1f},{height / 2:.1f}"
+            for index in range(len(series)))
+    else:
+        points = " ".join(
+            f"{index / (len(series) - 1) * width:.1f},"
+            f"{height - 2 - (value - low) / span * (height - 4):.1f}"
+            for index, value in enumerate(series))
+    return (f'<svg class="a-spark" viewBox="0 0 {width} {height}" '
+            f'preserveAspectRatio="none" aria-hidden="true">'
+            f'<polyline points="{points}"/></svg>')
+
+
+def _readouts(source, window: float = 30.0) -> None:
+    """One large number per channel, with where it has been and where it is
+    going. A single number updating twice a second tells you its value and
+    nothing else; the trend is most of the information."""
     latest = source.latest()
     if not latest:
         return
+
+    cutoff = time.time() - window
+    recent = [values for stamp, values in source.history() if stamp >= cutoff]
     names = list(latest)
+
     for start in range(0, len(names), 4):
         for column, name in zip(st.columns(4), names[start:start + 4]):
+            series = [v[name] for v in recent if name in v][-120:]
             with column:
-                st.markdown(
-                    f'<div class="a-sec-k">{name}</div>'
-                    f'<div class="a-live-value">{format_number(latest[name], 5)}'
-                    f'</div>', unsafe_allow_html=True)
+                st.markdown(_readout(name, latest[name], series),
+                            unsafe_allow_html=True)
+
+
+# Lifted out of the f-string below: Python 3.9 refuses a backslash escape
+# inside an f-string expression, and this app targets the system interpreter.
+_ARROWS = {"up": "\u25b2", "down": "\u25bc"}
+
+
+def _trend(series) -> str:
+    """"up", "down" or "" for a channel's direction across the window shown.
+
+    Measured by comparing the mean of the first fifth of the window with the
+    mean of the last fifth, not by differencing the last two samples. A
+    difference of consecutive samples is mostly noise, so an arrow driven by
+    it flickers between up and down several times a second and says nothing.
+
+    Averaging the ends instead makes the arrow mean the same thing as the
+    range printed beside it: where this channel has gone over the window you
+    are looking at.
+    """
+    if len(series) < 10:
+        return ""
+    edge = max(2, len(series) // 5)
+    before = sum(series[:edge]) / edge
+    after = sum(series[-edge:]) / edge
+    spread = max(series) - min(series)
+    if spread <= 0:
+        return ""
+    # A tenth of the window's own range: below that the channel is flat on the
+    # scale the user is actually looking at.
+    if abs(after - before) < spread * 0.10:
+        return ""
+    return "up" if after > before else "down"
+
+
+def _readout(name: str, value: float, series) -> str:
+    direction = _trend(series)
+    trend = ""
+    if direction:
+        trend = (f'<span class="a-live-trend a-live-{direction}">'
+                 f'{_ARROWS[direction]}</span>')
+
+    extent = ""
+    if len(series) >= 2 and max(series) > min(series):
+        extent = (f'<span class="a-live-extent">'
+                  f'{format_number(min(series), 4)} to '
+                  f'{format_number(max(series), 4)}</span>')
+
+    return (f'<div class="a-live">'
+            f'<div class="a-sec-k">{name}</div>'
+            f'<div class="a-live-value">{format_number(value, 5)}{trend}</div>'
+            f'{_sparkline(series)}'
+            f'{extent}</div>')
 
 
 def _status_line(source) -> None:
@@ -155,15 +239,16 @@ def _live_view(prefs: dict) -> None:
         return
 
     _status_line(source)
-    _readouts(source)
+
+    window_label = st.session_state.get("live_window", "Last 30 s")
+    seconds = WINDOW_CHOICES.get(window_label, 30.0)
+    _readouts(source, seconds if seconds is not None else 600.0)
 
     channels = source.channels()
     if not channels:
         st.caption("Waiting for the first sample…")
         return
 
-    window_label = st.session_state.get("live_window", "Last 30 s")
-    seconds = WINDOW_CHOICES.get(window_label, 30.0)
     samples = source.history()
     if seconds is not None:
         cutoff = time.time() - seconds

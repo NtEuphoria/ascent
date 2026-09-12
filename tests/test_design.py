@@ -211,3 +211,95 @@ def test_two_graphs_over_the_same_input_get_distinct_keys():
             st.download_button = original
         keys.add(captured["key"])
     assert len(keys) == 2
+
+
+# ---------------------------------------------------------------------------
+# Motion reach
+# ---------------------------------------------------------------------------
+def _duration_tokens(css):
+    """Every --a-d-* token declared in the base :root block."""
+    base = css.split("}", 1)[0]
+    return set(re.findall(r"(--a-d-[a-z]+):", base))
+
+
+def test_every_duration_token_is_scaled_by_the_setting():
+    """A token the Motion setting does not name is an animation the setting
+    cannot stop. --a-d-draw shipped that way: the mark kept drawing itself
+    with motion switched off, because only the four original tokens were
+    listed in the overrides."""
+    declared = _duration_tokens(theme._tokens("Dark", "Full"))
+    assert declared, "no duration tokens found - the parser is wrong"
+    for setting in ("Reduced", "None"):
+        css = theme._tokens("Dark", setting)
+        for token in declared:
+            override = css.rsplit(f"{token}:", 1)[1].split(";")[0]
+            assert override != "", f"{token} unset under Motion={setting}"
+        if setting == "None":
+            for token in declared:
+                assert css.rsplit(f"{token}:", 1)[1].split(";")[0] == "0ms", \
+                    f"{token} still animates with Motion=None"
+
+
+def test_system_reduce_motion_reaches_every_duration_token():
+    """The OS preference must win over the app setting for all of them, not
+    just the ones that existed when the media query was written."""
+    css = theme._tokens("Dark", "Full")
+    declared = _duration_tokens(css)
+    block = css.split("@media (prefers-reduced-motion: reduce)", 1)[1]
+    block = block.split("}", 1)[0]
+    for token in declared:
+        assert f"{token}:0ms" in block, f"{token} survives system reduce-motion"
+
+
+# ---------------------------------------------------------------------------
+# The influence bars
+# ---------------------------------------------------------------------------
+def _lift_influence_html():
+    """Render the influence block for the Lift page and return its markup."""
+    import streamlit as st
+
+    from calculators import aerodynamics
+    from utils.render import _influence_table
+    from utils.spec import Inputs
+
+    calc = next(c for c in aerodynamics.CALCULATORS if c.slug == "aero.lift")
+    values = Inputs({f.key: f.default for f in calc.inputs})
+    captured = []
+    original_md, original_cap = st.markdown, st.caption
+    st.markdown = lambda body, **kw: captured.append(body)
+    st.caption = lambda body, **kw: captured.append(body)
+    try:
+        _influence_table(calc, values, calc.compute(values))
+    finally:
+        st.markdown, st.caption = original_md, original_cap
+    return "".join(captured)
+
+
+def test_the_influence_bars_are_drawn_not_typed():
+    """They were a row of U+2588 in a markdown cell, which quantises the
+    comparison to twelve steps and inherits the table's alignment."""
+    html = _lift_influence_html()
+    assert "█" not in html
+    assert "a-inf-bar" in html and "--w:" in html
+
+
+def test_the_bar_widths_are_proportional_to_the_elasticities():
+    """Velocity is quadratic in the lift equation and everything else linear,
+    so its bar must be exactly twice the others."""
+    html = _lift_influence_html()
+    widths = [float(w) for w in re.findall(r"--w:([\d.]+)%", html)]
+    assert widths[0] == 100.0
+    assert all(w == 50.0 for w in widths[1:])
+
+
+def test_a_negative_influence_reads_as_a_direction_not_a_smaller_bar():
+    """An input that pushes the result the other way is a different fact, not
+    a weaker one - 43 pages in the catalogue have at least one."""
+    assert ".a-inf-down i{background:var(--a-warning);}" in theme._COMPONENTS
+    assert ".a-inf-up i{background:var(--a-accent);}" in theme._COMPONENTS
+
+
+def test_bars_animate_by_transform_not_width():
+    """Animating width reflows the page on every frame, once per row."""
+    block = theme._COMPONENTS.split("@keyframes a-bar-grow", 1)[1].split("}", 1)[0]
+    assert "scaleX" in block and "width" not in block

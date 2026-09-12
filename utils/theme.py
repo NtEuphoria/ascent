@@ -176,6 +176,7 @@ SCALE = {
     "d-base": "140ms",
     "d-slow": "220ms",
     "d-slower": "360ms",
+    "d-draw": "620ms",
     "ease": "cubic-bezier(.2,.7,.3,1)",
     "ease-out": "cubic-bezier(.16,1,.3,1)",
     "ease-quart": "cubic-bezier(.25,1,.5,1)",     # snappy, for press feedback
@@ -254,11 +255,16 @@ html,body,.stApp,[data-testid="stAppViewContainer"],[data-testid="stMain"]{
   border-color:var(--a-border-strong)!important;}
 """
 
+# Every duration token has to appear in both overrides. A token missing from
+# them is an animation the Motion setting cannot reach, which is how the
+# mark's draw kept playing with motion switched off - see
+# tests/test_design.py::test_every_duration_token_is_scaled_by_the_setting.
 _MOTION_OVERRIDES = {
     # Halved: still legible as motion, but out of the way.
     "Reduced": ("--a-d-fast:40ms;--a-d-base:70ms;--a-d-slow:110ms;"
-                "--a-d-slower:160ms;"),
-    "None": "--a-d-fast:0ms;--a-d-base:0ms;--a-d-slow:0ms;--a-d-slower:0ms;",
+                "--a-d-slower:160ms;--a-d-draw:300ms;"),
+    "None": ("--a-d-fast:0ms;--a-d-base:0ms;--a-d-slow:0ms;"
+             "--a-d-slower:0ms;--a-d-draw:0ms;"),
 }
 
 
@@ -296,7 +302,8 @@ def _tokens(appearance: str = "Follow system", motion: str = "Full",
 
     # The system preference always wins over the app's own motion setting.
     css += ("@media (prefers-reduced-motion: reduce){:root{"
-            "--a-d-fast:0ms;--a-d-base:0ms;--a-d-slow:0ms;--a-d-slower:0ms;}}")
+            "--a-d-fast:0ms;--a-d-base:0ms;--a-d-slow:0ms;"
+            "--a-d-slower:0ms;--a-d-draw:0ms;}}")
     return css
 
 
@@ -387,6 +394,98 @@ _COMPONENTS = """
 .a-live-value{font-family:var(--a-font-num);font-size:var(--a-t-lg);
   font-weight:600;color:var(--a-ink);font-variant-numeric:tabular-nums;
   letter-spacing:-0.015em;line-height:1.25;}
+
+/* ---- Influence table ---- */
+/* A grid rather than a table: four columns that stay aligned down the list,
+   with the bar as the thing the eye actually compares. */
+.a-inf-list{list-style:none;margin:var(--a-s3) 0 0 0;padding:0;
+  display:flex;flex-direction:column;gap:2px;}
+.a-inf{display:grid;
+  grid-template-columns:minmax(8rem,1.4fr) 4.6rem minmax(4rem,1fr) auto;
+  align-items:center;gap:var(--a-s3);
+  padding:7px var(--a-s2);border-radius:var(--a-r-sm);
+  animation:a-rise var(--a-d-slow) var(--a-ease-expo) both;
+  animation-delay:var(--d,0ms);
+  transition:background-color var(--a-d-fast) var(--a-ease);}
+.a-inf:hover{background:var(--a-raised);}
+.a-inf-k{font-size:var(--a-t-sm);color:var(--a-ink);}
+.a-inf-v{font-family:var(--a-font-num);font-size:var(--a-t-sm);
+  font-weight:600;font-variant-numeric:tabular-nums;
+  letter-spacing:-0.01em;color:var(--a-ink);text-align:right;}
+.a-inf-why{font-size:var(--a-t-xs);color:var(--a-ink-faint);
+  white-space:nowrap;}
+
+/* The track is always full width so the bars share one scale; only the fill
+   varies. Without the track the eye has nothing to measure against. */
+.a-inf-bar{position:relative;height:7px;border-radius:999px;
+  background:var(--a-sunken);overflow:hidden;}
+.a-inf-bar i{position:absolute;inset:0 auto 0 0;display:block;
+  border-radius:999px;width:var(--w,0%);
+  transform-origin:left center;
+  animation:a-bar-grow var(--a-d-slower) var(--a-ease-expo) both;
+  animation-delay:var(--d,0ms);
+  transition:width var(--a-d-slow) var(--a-ease-expo);}
+.a-inf-up i{background:var(--a-accent);}
+/* A negative elasticity moves the result the other way. That is a different
+   fact, not a smaller one, so it reads as a different colour rather than a
+   shorter bar. */
+.a-inf-down i{background:var(--a-warning);}
+.a-inf-off{opacity:.62;}
+.a-inf-off .a-inf-v{font-family:var(--a-font-ui);font-weight:400;
+  color:var(--a-ink-faint);font-size:var(--a-t-xs);text-align:right;}
+
+/* Scale rather than width: width is a layout property and animating it on
+   every row forces a reflow per frame. */
+@keyframes a-bar-grow{from{transform:scaleX(0);}to{transform:scaleX(1);}}
+
+/* ---- Explore tabs ---- */
+/* Switching tabs is a change of subject, so the new panel arrives rather than
+   replacing the old one in place. */
+[data-testid="stTabs"] [role="tabpanel"]{
+  animation:a-panel-in var(--a-d-slow) var(--a-ease-expo) both;}
+@keyframes a-panel-in{from{opacity:0;transform:translateY(4px);}
+  to{opacity:1;transform:none;}}
+[data-testid="stTabs"] button[role="tab"]{
+  transition:color var(--a-d-base) var(--a-ease),
+             background-color var(--a-d-fast) var(--a-ease);}
+
+/* ---- Regime checks ---- */
+/* A Check is the page telling you the model has stopped being true. It should
+   arrive noticeably, but never by moving anything below it - the slot is
+   reserved whether or not it fires. */
+[data-testid="stAlert"]{
+  animation:a-check-in var(--a-d-slow) var(--a-ease-expo) both;}
+@keyframes a-check-in{from{opacity:0;transform:translateY(-3px) scale(.995);}
+  to{opacity:1;transform:none;}}
+
+/* ---- Live readouts ---- */
+/* The value itself is never animated between numbers - a readout that tweens
+   through values it never measured is inventing data. Only the frame reacts. */
+.a-live{padding:var(--a-s2) 0;}
+.a-live-value{transition:color var(--a-d-base) var(--a-ease);
+  display:flex;align-items:baseline;gap:var(--a-s2);}
+.a-live-trend{font-size:0.55em;line-height:1;font-family:var(--a-font-ui);
+  transition:opacity var(--a-d-base) var(--a-ease),
+             color var(--a-d-base) var(--a-ease);}
+.a-live-up{color:var(--a-positive);}
+.a-live-down{color:var(--a-warning);}
+.a-spark{display:block;width:100%;height:26px;margin:var(--a-s1) 0 2px;
+  overflow:visible;}
+.a-spark polyline{fill:none;stroke:var(--a-accent);stroke-width:1.5;
+  stroke-linecap:round;stroke-linejoin:round;vector-effect:non-scaling-stroke;
+  opacity:.85;}
+.a-live-extent{font-size:var(--a-t-xs);color:var(--a-ink-faint);
+  font-family:var(--a-font-num);font-variant-numeric:tabular-nums;}
+
+/* ---- The mark ---- */
+/* The dart draws itself on first paint, the same gesture the splash makes, so
+   launching the app and landing in it are one continuous motion. */
+.a-brand svg path{
+  animation:a-mark-draw var(--a-d-draw) var(--a-ease-expo) both;}
+@keyframes a-mark-draw{
+  from{opacity:0;transform:translateY(2px) scale(.86);}
+  to{opacity:1;transform:none;}}
+.a-brand svg{transform-box:fill-box;transform-origin:center;}
 
 /* ---- Lists ---- */
 ul.a-tight{margin:2px 0 0 0;padding-left:var(--a-s4);
