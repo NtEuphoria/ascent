@@ -18,7 +18,7 @@ from typing import Dict, List, NamedTuple
 import streamlit as st
 
 from calculators import robotics, structures
-from utils import project as store
+from studios import shell
 from utils import ui
 from utils.constants import G0
 from utils.formatting import format_number
@@ -154,48 +154,31 @@ def beam(work: Job, payload_kg: float, arm_kg: float, length_m: float,
 def verdicts(drive_result: Drive, beam_result: Beam) -> List[Dict[str, object]]:
     """Every check this studio makes, with the margin that decided it."""
     return [
-        {"label": "Motor torque",
-         "ok": drive_result.torque_headroom >= 1.0,
-         "margin": drive_result.torque_headroom,
-         "detail": f"needs {format_number(drive_result.motor_torque, 3)} N·m "
-                   f"against {int(TORQUE_MARGIN * 100)}% of stall"},
-        {"label": "Motor speed",
-         "ok": drive_result.speed_headroom >= 1.0,
-         "margin": drive_result.speed_headroom,
-         "detail": f"needs {format_number(drive_result.motor_speed_rpm, 4)} rpm"},
-        {"label": "Arm stress",
-         "ok": beam_result.stress_headroom >= 1.5,
-         "margin": beam_result.stress_headroom,
-         "detail": f"{format_number(beam_result.stress / 1e6, 3)} MPa at the "
-                   f"root, wanted a factor of 1.5 on yield"},
-        {"label": "Arm stiffness",
-         "ok": beam_result.deflection_headroom >= 1.0,
-         "margin": beam_result.deflection_headroom,
-         "detail": f"tip drops {format_number(beam_result.deflection * 1000, 3)}"
-                   f" mm, limit is L/{int(DEFLECTION_LIMIT)}"},
+        shell.check(
+            "Motor torque", drive_result.torque_headroom >= 1.0,
+            drive_result.torque_headroom,
+            f"needs {format_number(drive_result.motor_torque, 3)} N·m against "
+            f"{int(TORQUE_MARGIN * 100)}% of stall"),
+        shell.check(
+            "Motor speed", drive_result.speed_headroom >= 1.0,
+            drive_result.speed_headroom,
+            f"needs {format_number(drive_result.motor_speed_rpm, 4)} rpm"),
+        shell.check(
+            "Arm stress", beam_result.stress_headroom >= 1.5,
+            beam_result.stress_headroom,
+            f"{format_number(beam_result.stress / 1e6, 3)} MPa at the root, "
+            f"wanted a factor of 1.5 on yield"),
+        shell.check(
+            "Arm stiffness", beam_result.deflection_headroom >= 1.0,
+            beam_result.deflection_headroom,
+            f"tip drops {format_number(beam_result.deflection * 1000, 3)} mm, "
+            f"limit is L/{int(DEFLECTION_LIMIT)}"),
     ]
 
 
 # ---------------------------------------------------------------------------
 # The page
 # ---------------------------------------------------------------------------
-def _step(number: int, title: str, blurb: str) -> None:
-    st.markdown(f'<div class="a-step"><span>{number}</span>'
-                f'<div><b>{title}</b><i>{blurb}</i></div></div>',
-                unsafe_allow_html=True)
-
-
-def _figures(items) -> None:
-    """A row of derived values, in the same treatment as a result card."""
-    cells = "".join(
-        f'<div><div class="a-sec-k">{label}</div>'
-        f'<div class="a-sec-v">{format_number(value, 4)}'
-        f'<span class="a-sec-u"> {unit}</span></div></div>'
-        for label, value, unit in items)
-    st.markdown(f'<div class="a-result"><div class="a-sec">{cells}</div></div>',
-                unsafe_allow_html=True)
-
-
 def render(prefs=None, catalogue=None) -> None:
     prefs = prefs or {}
     ui.page_header(
@@ -209,7 +192,7 @@ def render(prefs=None, catalogue=None) -> None:
         PREFIX)
 
     # -- 1 ------------------------------------------------------------------
-    _step(1, "The job", "What is being moved, how far, and how quickly.")
+    shell.step(1, "The job", "What is being moved, how far, and how quickly.")
     a, b, c, d, e = st.columns(5)
     with a:
         payload = st.number_input("Payload [kg]", value=2.0, min_value=0.0,
@@ -237,7 +220,7 @@ def render(prefs=None, catalogue=None) -> None:
         st.error(str(exc))
         return
 
-    _figures([("Torque at the joint", work.load_torque, "N·m"),
+    shell.figures([("Torque at the joint", work.load_torque, "N·m"),
               ("Load inertia", work.load_inertia, "kg·m²"),
               ("Angular acceleration", work.acceleration, "rad/s²"),
               ("Peak joint speed",
@@ -248,7 +231,7 @@ def render(prefs=None, catalogue=None) -> None:
                "any smooth profile of that duration demands.")
 
     # -- 2 ------------------------------------------------------------------
-    _step(2, "The drive", "A motor and a reduction that can deliver it.")
+    shell.step(2, "The drive", "A motor and a reduction that can deliver it.")
     f, g, h = st.columns(3)
     with f:
         ratio = st.number_input("Gear ratio N : 1", value=50.0, min_value=1.0,
@@ -271,13 +254,13 @@ def render(prefs=None, catalogue=None) -> None:
 
     drive_result = drive(work, ratio, efficiency, motor_inertia, stall,
                          free_speed)
-    _figures([("Motor torque needed", drive_result.motor_torque, "N·m"),
+    shell.figures([("Motor torque needed", drive_result.motor_torque, "N·m"),
               ("Motor speed needed", drive_result.motor_speed_rpm, "rpm"),
               ("Torque headroom", drive_result.torque_headroom, "x"),
               ("Speed headroom", drive_result.speed_headroom, "x")])
 
     # -- 3 ------------------------------------------------------------------
-    _step(3, "The arm", "The thing carrying the load has to survive it.")
+    shell.step(3, "The arm", "The thing carrying the load has to survive it.")
     i, j_col, k, m = st.columns(4)
     with i:
         section = st.selectbox("Section", list(structures.SECTIONS),
@@ -303,33 +286,21 @@ def render(prefs=None, catalogue=None) -> None:
         st.error(f"{exc}")
         return
 
-    _figures([("Second moment I", beam_result.second_moment * 1e12, "mm⁴"),
+    shell.figures([("Second moment I", beam_result.second_moment * 1e12, "mm⁴"),
               ("Stress at the root", beam_result.stress / 1e6, "MPa"),
               ("Tip deflection", beam_result.deflection * 1000.0, "mm"),
               ("Factor on yield", beam_result.stress_headroom, "x")])
 
     # -- 4 ------------------------------------------------------------------
-    _step(4, "The verdict", "Whether what you described will actually work.")
-    checks = verdicts(drive_result, beam_result)
-    passing = sum(1 for check in checks if check["ok"])
-    for check in checks:
-        style = "a-ok" if check["ok"] else "a-bad"
-        text = "Passes" if check["ok"] else "Fails"
-        st.markdown(
-            f'<div class="a-req"><span class="a-badge {style}">{text}</span>'
-            f'<span class="a-req-label">{check["label"]}</span>'
-            f'<span class="a-req-rule">{check["detail"]}  ·  '
-            f'{format_number(check["margin"], 3)}x</span></div>',
-            unsafe_allow_html=True)
+    shell.step(4, "The verdict", "Whether what you described will actually work.")
+    shell.verdict_board(verdicts(drive_result, beam_result))
 
-    if passing == len(checks):
-        st.success("Every check passes. The margins above are what you have "
-                   "to spend on the things this studio does not model.")
-    else:
-        st.warning(f"{len(checks) - passing} of {len(checks)} checks fail. "
-                   "The headroom figures say how far off each one is.")
-
-    _to_project(payload, length, arm_mass, work)
+    shell.send_to_project(PREFIX, [
+        ("Payload mass", payload, "kg"),
+        ("Arm length", length, "m"),
+        ("Arm mass", arm_mass, "kg"),
+        ("Joint torque", work.load_torque, "N·m"),
+    ], note="from the lift and arm studio")
 
     ui.assumptions([
         "Worst-case torque only - the arm horizontal, gravity at full moment "
@@ -350,29 +321,6 @@ def render(prefs=None, catalogue=None) -> None:
         f"Stiffness is judged against L/{int(DEFLECTION_LIMIT)}, a workshop "
         "rule of thumb rather than a standard. Decide your own limit.",
     ])
-
-
-def _to_project(payload: float, length: float, arm_mass: float,
-                work: Job) -> None:
-    """Push this studio's inputs into the project as shared parameters."""
-    st.write("")
-    with st.popover("Send to project", use_container_width=False):
-        st.markdown('<div class="a-note">Adds these as shared parameters, so '
-                    'the same payload and arm length drive every calculator '
-                    'page you link them on.</div>', unsafe_allow_html=True)
-        with st.form(f"{PREFIX}_toproject", border=False):
-            source = st.selectbox("Mark them as", store.SOURCES, index=2)
-            if st.form_submit_button("Add to project", type="primary"):
-                project = store.load()
-                for label, value, unit in (
-                        ("Payload mass", payload, "kg"),
-                        ("Arm length", length, "m"),
-                        ("Arm mass", arm_mass, "kg"),
-                        ("Joint torque", work.load_torque, "N·m")):
-                    store.add_parameter(project, label, value, unit, source,
-                                        "from the lift and arm studio")
-                store.save(project)
-                st.success("Added. Open Project to see where they are used.")
 
 
 CALCULATORS = [
