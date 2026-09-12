@@ -171,7 +171,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     var progressHost: NSView!
     var wordmark: NSTextField!
     var markLayer: CAShapeLayer!
+    var ringLayer: CAShapeLayer!
     var progressFill: CAShapeLayer!
+    /// Set once the page is up, so the slow-boot reveal knows to stay away.
+    var splashFinished = false
     var server: Process?
     var port = 8501
 
@@ -495,15 +498,37 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         path.addLine(to: CGPoint(x: 218 * s, y: 236 * s))
         path.closeSubpath()
 
+        // A ring that passes outward through the mark: a pressure pulse. It is
+        // drawn first so it sits behind the dart.
+        let ring = CAShapeLayer()
+        ring.path = CGPath(ellipseIn: CGRect(x: 12, y: 12, width: 60, height: 60),
+                           transform: nil)
+        ring.strokeColor = accentColour.cgColor
+        ring.fillColor = NSColor.clear.cgColor
+        ring.lineWidth = 1.5
+        ring.opacity = 0
+        // Anchored at its own centre so a scale animation expands about the
+        // middle. An AppKit view-backed layer cannot be re-anchored without
+        // moving the view, but a sublayer we own can.
+        ring.bounds = CGRect(x: 0, y: 0, width: 84, height: 84)
+        ring.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        ring.position = CGPoint(x: 42, y: 42)
+        markHost.layer?.masksToBounds = false
+        markHost.layer?.addSublayer(ring)
+        ringLayer = ring
+
+        // Filled, not stroked. The icon is filled and so is the mark inside
+        // the app, so a stroked outline here was the one surface out of three
+        // that did not match.
         let mark = CAShapeLayer()
         mark.path = path
-        mark.strokeColor = accentColour.cgColor
-        mark.fillColor = NSColor.clear.cgColor
-        mark.lineWidth = 2.5
+        mark.fillColor = accentColour.cgColor
+        mark.strokeColor = NSColor.clear.cgColor
         mark.lineJoin = .round
-        mark.lineCap = .round
-        mark.strokeEnd = reduceMotion ? 1 : 0
-        mark.fillRule = .nonZero
+        mark.bounds = CGRect(x: 0, y: 0, width: 84, height: 84)
+        mark.anchorPoint = CGPoint(x: 0.5, y: 0.5)
+        mark.position = CGPoint(x: 42, y: 42)
+        mark.opacity = reduceMotion ? 1 : 0
         markHost.layer?.addSublayer(mark)
         markLayer = mark
 
@@ -525,37 +550,91 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
         fill.strokeEnd = 0
         progressHost.layer?.addSublayer(fill)
         progressFill = fill
+
+        // Hidden to begin with. A progress bar is a promise that you are going
+        // to be waiting, and on a warm start you are not - the whole splash is
+        // gone inside a second. It appears only if the boot actually runs long.
+        progressHost.alphaValue = 0
+        statusLabel.alphaValue = 0
     }
 
-    /// Mark strokes itself in, then the wordmark fades up beneath it.
+    /// The mark springs in, a pulse passes out through it, the wordmark
+    /// follows. Everything is a layer transform or an opacity, so it all runs
+    /// on the GPU and none of it touches layout.
     func playIntro() {
         guard !reduceMotion else {
             wordmark.alphaValue = 1
+            markLayer.opacity = 1
+            scheduleSlowBootReveal()
             return
         }
-        let stroke = CABasicAnimation(keyPath: "strokeEnd")
-        stroke.fromValue = 0
-        stroke.toValue = 1
-        stroke.duration = 0.55
-        stroke.timingFunction = CAMediaTimingFunction(name: .easeInEaseOut)
-        stroke.fillMode = .forwards
-        stroke.isRemovedOnCompletion = false
-        markLayer.add(stroke, forKey: "draw")
 
-        // Fill the mark in behind the stroke once it has drawn.
-        let fillIn = CABasicAnimation(keyPath: "fillColor")
-        fillIn.fromValue = NSColor.clear.cgColor
-        fillIn.toValue = accentColour.withAlphaComponent(0.12).cgColor
-        fillIn.beginTime = CACurrentMediaTime() + 0.5
-        fillIn.duration = 0.35
-        fillIn.fillMode = .forwards
-        fillIn.isRemovedOnCompletion = false
-        markLayer.add(fillIn, forKey: "fill")
+        // A spring rather than an ease, because the settle is what makes it
+        // read as physical instead of as a timed fade. Damping is high enough
+        // that it never visibly bounces - it arrives and stops.
+        let pop = CASpringAnimation(keyPath: "transform.scale")
+        pop.fromValue = 0.62
+        pop.toValue = 1.0
+        pop.damping = 17
+        pop.stiffness = 240
+        pop.mass = 0.9
+        pop.initialVelocity = 6
+        pop.duration = pop.settlingDuration
+        pop.fillMode = .forwards
+        pop.isRemovedOnCompletion = false
+        markLayer.add(pop, forKey: "pop")
+
+        let appear = CABasicAnimation(keyPath: "opacity")
+        appear.fromValue = 0
+        appear.toValue = 1
+        appear.duration = 0.20
+        appear.timingFunction = CAMediaTimingFunction(name: .easeOut)
+        appear.fillMode = .forwards
+        appear.isRemovedOnCompletion = false
+        markLayer.opacity = 1
+        markLayer.add(appear, forKey: "appear")
+
+        // The pulse. Expands through and past the mark, fading as it goes, so
+        // the eye is carried outward rather than left staring at a logo.
+        let expand = CABasicAnimation(keyPath: "transform.scale")
+        expand.fromValue = 0.30
+        expand.toValue = 2.4
+        let fade = CABasicAnimation(keyPath: "opacity")
+        fade.fromValue = 0.55
+        fade.toValue = 0.0
+        let pulse = CAAnimationGroup()
+        pulse.animations = [expand, fade]
+        pulse.duration = 0.62
+        pulse.beginTime = CACurrentMediaTime() + 0.05
+        // Exponential ease-out: quick away from the mark, long settle at the
+        // edge, which is how a pressure wave actually looks.
+        pulse.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
+        pulse.fillMode = .forwards
+        pulse.isRemovedOnCompletion = false
+        ringLayer.add(pulse, forKey: "pulse")
 
         NSAnimationContext.runAnimationGroup { context in
-            context.duration = 0.45
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-            wordmark.animator().alphaValue = 1
+            context.duration = 0.30
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
+            self.wordmark.animator().alphaValue = 1
+        }
+
+        scheduleSlowBootReveal()
+    }
+
+    /// Show the hairline only if the boot is slow enough to be worth a
+    /// progress indicator. A cold first launch builds a Python environment and
+    /// takes a while; a warm one does not, and should not be made to look like
+    /// it might.
+    func scheduleSlowBootReveal() {
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { [weak self] in
+            guard let self = self, !self.splashFinished else { return }
+            NSAnimationContext.runAnimationGroup { context in
+                context.duration = self.reduceMotion ? 0 : 0.25
+                context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+                self.progressHost.animator().alphaValue = 1
+                self.statusLabel.animator().alphaValue = 1
+            }
         }
     }
 
@@ -578,13 +657,29 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     func webView(_ webView: WKWebView, didFinish navigation: WKNavigation!) {
         log("page loaded")
+        splashFinished = true
         setProgress(1.0)
         // A hard isHidden swap here was the most jarring moment in v1.0.0.
         webView.alphaValue = 0
         webView.isHidden = false
+
+        // The mark keeps moving as it goes, drifting very slightly toward the
+        // viewer. A layer that freezes and then fades reads as a picture being
+        // removed; one that is still moving reads as a hand-off.
+        if !reduceMotion {
+            let drift = CABasicAnimation(keyPath: "transform.scale")
+            drift.fromValue = 1.0
+            drift.toValue = 1.06
+            drift.duration = 0.26
+            drift.timingFunction = CAMediaTimingFunction(controlPoints: 0.4, 0, 1, 1)
+            drift.fillMode = .forwards
+            drift.isRemovedOnCompletion = false
+            markLayer.add(drift, forKey: "handoff")
+        }
+
         NSAnimationContext.runAnimationGroup({ context in
-            context.duration = self.reduceMotion ? 0 : 0.32
-            context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+            context.duration = self.reduceMotion ? 0 : 0.24
+            context.timingFunction = CAMediaTimingFunction(controlPoints: 0.16, 1, 0.3, 1)
             self.webView.animator().alphaValue = 1
             self.loadingView.animator().alphaValue = 0
         }, completionHandler: {

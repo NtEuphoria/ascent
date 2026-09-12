@@ -478,8 +478,9 @@ _COMPONENTS = """
   font-family:var(--a-font-num);font-variant-numeric:tabular-nums;}
 
 /* ---- The mark ---- */
-/* The dart draws itself on first paint, the same gesture the splash makes, so
-   launching the app and landing in it are one continuous motion. */
+/* The dart rises and settles on first paint - the same gesture the splash
+   makes as it springs in, so launching the app and landing in it read as one
+   continuous motion rather than two separate entrances. */
 .a-brand svg path{
   animation:a-mark-draw var(--a-d-draw) var(--a-ease-expo) both;}
 @keyframes a-mark-draw{

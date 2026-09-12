@@ -96,9 +96,10 @@ def test_accent_text_clears_aa(mode, accent):
 # ---------------------------------------------------------------------------
 # The mark
 # ---------------------------------------------------------------------------
-def test_the_in_app_mark_is_the_same_shape_the_splash_strokes():
-    """One dart, three surfaces. If the Swift path is retouched and the SVG is
-    not, the app you launch stops matching the app you land in."""
+def test_the_in_app_mark_is_the_same_shape_the_splash_draws():
+    """One dart, three surfaces - icon, splash, and the header inside the app,
+    all filled. If the Swift path is retouched and the SVG is not, the app you
+    launch stops matching the app you land in."""
     swift = open("macos/main.swift", encoding="utf-8").read()
     body = swift[swift.index("let path = CGMutablePath()"):]
     body = body[:body.index("closeSubpath()")]
