@@ -20,8 +20,9 @@ from typing import Dict, List
 
 import streamlit as st
 
+from . import backdrop
 from . import settings as user_settings
-from . import ui
+from . import theme, ui
 
 STEP_KEY = "_onboard_step"
 PICKS_KEY = "_onboard_disciplines"
@@ -270,6 +271,26 @@ _PANELS = {"welcome": _welcome, "appearance": _appearance, "accent": _accent,
 # ---------------------------------------------------------------------------
 # Entry point
 # ---------------------------------------------------------------------------
+def _backdrop(prefs: dict) -> None:
+    """The field behind the panel.
+
+    Colours are resolved here rather than inside the iframe because the iframe
+    is a separate document and cannot see the parent's custom properties. The
+    appearance is read the same way the charts read it, so a forced Light or
+    Dark is honoured rather than the OS being asked.
+    """
+    appearance = prefs.get("appearance", "Follow system")
+    mode = "light" if appearance == "Light" else "dark"
+    if appearance == "Follow system":
+        detected = getattr(getattr(st, "context", None), "theme", None)
+        mode = "light" if getattr(detected, "type", "dark") == "light" else "dark"
+    accent = theme.ACCENTS.get(prefs.get("accent", "Blue"),
+                               theme.ACCENTS["Blue"])[mode][0]
+    ink = (theme.LIGHT if mode == "light" else theme.DARK)["ink"]
+    with st.container(key="backdrop"):
+        backdrop.render(accent, ink, prefs.get("motion", "Full"))
+
+
 def run(prefs: dict) -> None:
     """Draw the current panel. Called instead of the app, never alongside it."""
     # The sidebar is empty during setup but Streamlit still reserves its
@@ -291,6 +312,8 @@ def run(prefs: dict) -> None:
             # be scrolled back into view. The six-option panel is that tall.
             "[data-testid='stMain'] .block-container "
             "> [data-testid='stVerticalBlock']{flex:0 1 auto;"
-            "margin-top:auto;margin-bottom:auto;}</style>")
+            "margin-top:auto;margin-bottom:auto;}"
+            + backdrop.LAYER_CSS + "</style>")
+    _backdrop(prefs)
     with st.container(key="onboarding"):
         _PANELS[STEPS[_step()]](prefs)
