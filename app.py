@@ -15,6 +15,7 @@ from calculators import (aerodynamics, controls, drones, electrical, flight,
                          live, materials, mechanical, project,
                          propulsion, reference, robotics, rotational,
                          structures, units)
+from studios import lift_arm
 from utils import navigate, onboarding, palette
 from utils import render as renderer
 from utils import settings as user_settings
@@ -32,6 +33,7 @@ CATEGORIES = {
     # First, because it is the thing the rest hangs off: a value defined here
     # is the same value on every page that links it.
     "Project": project.CALCULATORS,
+    "Studios": lift_arm.CALCULATORS,
     "Aerodynamics": aerodynamics.CALCULATORS,
     "Flight performance": flight.CALCULATORS,
     "Drones": drones.CALCULATORS,
@@ -49,6 +51,34 @@ CATEGORIES = {
 }
 
 
+# Three things this app is for, kept apart because they are different kinds of
+# work: looking one number up, carrying a design through, and watching
+# hardware. Mixing them into a single list of categories made the fastest of
+# the three - open a page, read a figure - scroll past everything else.
+MODES = {
+    "Calculators": [name for name in CATEGORIES
+                    if name not in ("Project", "Studios", "Live data")],
+    "Studios": ["Studios", "Project"],
+    "Live": ["Live data"],
+}
+
+# The visible label is the section name, hidden from sight by CSS and replaced
+# with a drawn icon. Material Symbols is a webfont and this app runs offline,
+# so the icon-font route rendered the ligature names as plain text.
+
+MODE_BLURB = {
+    "Calculators": "One equation at a time.",
+    "Studios": "Carry a design through end to end.",
+    "Live": "Read a device that is plugged in.",
+}
+
+
+def mode_of_category():
+    """category -> mode. One category belongs to exactly one mode."""
+    return {category: mode
+            for mode, categories in MODES.items() for category in categories}
+
+
 def all_calculators():
     """Every calculator in the app, paired with its category.
 
@@ -58,6 +88,14 @@ def all_calculators():
     return [(category, calc)
             for category, entry in CATEGORIES.items()
             for calc in normalise(entry, category)]
+
+
+def _reconcile_mode(modes) -> None:
+    if st.session_state.get("nav_mode") not in MODES:
+        st.session_state["nav_mode"] = list(MODES)[0]
+    category = st.session_state.get("nav_category")
+    if category in modes and st.session_state.get("nav_mode") != modes[category]:
+        st.session_state["nav_mode"] = modes[category]
 
 
 def _quick_links(heading: str, slugs, by_slug, key_prefix: str,
@@ -104,21 +142,34 @@ def main() -> None:
 
     catalogue = all_calculators()
     by_slug = {calc.slug: (category, calc) for category, calc in catalogue}
+    modes = mode_of_category()
 
     # Restore the last calculator on the first run of a session, before the
     # navigation widgets are built - which is the only point at which their
     # session-state keys can still be set.
-    if "nav_restored" not in st.session_state:
+    # Not if something has already decided the page. A deep link, a palette
+    # jump or a restored section should win over "reopen where you left off" -
+    # otherwise arriving at a specific page silently lands you on the last one
+    # instead.
+    if ("nav_restored" not in st.session_state
+            and "nav_category" not in st.session_state):
         st.session_state["nav_restored"] = True
         last = prefs.get("last_page", "")
         if prefs.get("start_page") == "Where I left off" and last in by_slug:
             category, calc = by_slug[last]
+            st.session_state["nav_mode"] = modes.get(category, "Calculators")
             st.session_state["nav_category"] = category
             st.session_state[f"nav_equation::{category}"] = calc.name
 
     # Both of these write navigation widget keys, so both must run before the
     # sidebar builds those widgets.
-    navigate.apply(by_slug)
+    navigate.apply(by_slug, modes)
+    # The section always follows the category. A restored last page, a deep
+    # link or a palette jump sets the category; leaving the section showing a
+    # list that does not contain it would show a sidebar with nothing
+    # selected in it. Done before the widgets are built, which is the only
+    # point at which their keys can still be written.
+    _reconcile_mode(modes)
     palette.trigger(catalogue)          # hidden; the Cmd-K menu item clicks it
 
     with st.sidebar:
@@ -135,10 +186,47 @@ def main() -> None:
                                 if slug not in prefs.get("favourites", [])],
                      by_slug, "rec", limit=4)
 
-        st.markdown('<div class="a-side-head">Browse</div>',
+        # Buttons rather than st.segmented_control. The widget looks right
+        # but AppTest cannot serialise its state between runs - a second run
+        # raises KeyError while indexing the selection - which would make
+        # every end-to-end navigation test impossible to write. Buttons are
+        # fully supported, keep nav_mode as plain session state rather than a
+        # widget key, and leave the radio indices the tests address untouched.
+        mode = st.session_state.get("nav_mode", list(MODES)[0])
+        with st.container(key="modeswitch"):
+            for column, name in zip(st.columns(len(MODES)), MODES):
+                with column:
+                    if st.button(name, key=f"mode_{name}",
+                                 help=f"{name} — {MODE_BLURB[name]}",
+                                 use_container_width=True,
+                                 type="primary" if name == mode
+                                 else "secondary"):
+                        # The category has to move with the section, or
+                        # _reconcile_mode immediately drags the section back
+                        # to wherever the old category lives and the switch
+                        # appears to do nothing. Returning to the category
+                        # last used in that section, rather than always its
+                        # first, is what makes switching back and forth feel
+                        # like two places instead of two resets.
+                        remembered = st.session_state.get(f"nav_last::{name}")
+                        st.session_state["nav_mode"] = name
+                        st.session_state["nav_category"] = (
+                            remembered if remembered in MODES[name]
+                            else MODES[name][0])
+                        st.rerun()
+        st.markdown(f'<div class="a-mode-name">{mode}'
+                    f'<span>{MODE_BLURB[mode]}</span></div>',
                     unsafe_allow_html=True)
-        category = st.selectbox("Category", list(CATEGORIES.keys()),
-                                key="nav_category", label_visibility="collapsed")
+
+        names = MODES[mode]
+        if len(names) == 1:
+            # One category in this section: a dropdown of one is a control that
+            # cannot do anything.
+            category = names[0]
+        else:
+            category = st.selectbox("Category", names, key="nav_category",
+                                    label_visibility="collapsed")
+        st.session_state[f"nav_last::{mode}"] = category
         calculators = normalise(CATEGORIES[category], category)
         by_name = {calc.name: calc for calc in calculators}
         # The radio key includes the category so each category keeps its own

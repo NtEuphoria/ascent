@@ -2,6 +2,10 @@
 
 Cross-link with `related=[...]` using these exact slugs.
 
+Grouped by the section each category belongs to.
+
+# Calculators
+
 ## Aerodynamics
 - `aero.lift` — Lift
 - `aero.drag` — Drag
@@ -25,12 +29,16 @@ Cross-link with `related=[...]` using these exact slugs.
 - `drone.flight_time` — Flight time (estimate)
 - `drone.power` — Electrical power
 - `drone.battery_energy` — Battery energy
+- `drone.battery_sag` — Battery sag & internal resistance
+- `drone.range_endurance` — Electric range & endurance
 
 ## Propulsion
 - `prop.momentum_theory` — Momentum theory (hover)
 - `prop.hover_endurance` — Hover power & endurance
+- `prop.advance_ratio` — Propeller advance ratio
 - `prop.motor_constants` — Motor constants (Kv, Kt, back-EMF)
 - `prop.rocket_equation` — Rocket equation
+- `prop.rocket_thrust` — Rocket thrust & mass flow
 
 ## Mechanical
 - `mech.force` — Force (F = ma)
@@ -53,6 +61,8 @@ Cross-link with `related=[...]` using these exact slugs.
 ## Structures
 - `struct.second_moment` — Second moment of area
 - `struct.beam_bending` — Beam bending
+- `struct.torsion` — Torsion of a shaft
+- `struct.buckling` — Column buckling
 - `struct.elastic_constants` — Elastic constants (E, ν, G, K)
 
 ## Materials
@@ -68,13 +78,15 @@ Cross-link with `related=[...]` using these exact slugs.
 - `robot.reflected_inertia` — Gear train: reflected inertia
 - `robot.servo_torque` — Servo / arm holding torque
 - `robot.encoder_resolution` — Encoder resolution
+- `robot.two_link_arm` — Two-link arm: inverse kinematics
 
 ## Electrical / robotics
-- `electrical___robotics.ohm's_law` — Ohm's law
-- `electrical___robotics.electrical_power` — Electrical power
-- `electrical___robotics.resistors_in_series` — Resistors in series
-- `electrical___robotics.resistors_in_parallel` — Resistors in parallel
-- `electrical___robotics.battery_energy` — Battery energy
+- `elec.ohms_law` — Ohm's law
+- `elec.power` — Electrical power
+- `elec.series` — Resistors in series
+- `elec.parallel` — Resistors in parallel
+- `elec.battery_energy` — Battery energy
+- `elec.voltage_drop` — Wire voltage drop
 
 ## Control systems
 - `ctrl.error` — Control error
@@ -95,4 +107,18 @@ Cross-link with `related=[...]` using these exact slugs.
 ## Constants / reference
 - `constants___reference.engineering_constants` — Engineering constants
 - `constants___reference.standard_atmosphere_(isa)` — Standard atmosphere (ISA)
+
+# Studios
+
+## Studios
+- `studio.lift_arm` — Lift and arm
+
+## Project
+- `project.board` — Project
+
+# Live
+
+## Live data
+- `live.monitor` — Live monitor
+- `live.bridge` — Live calculation
 

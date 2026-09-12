@@ -16,6 +16,8 @@ from typing import List, Tuple
 
 import streamlit as st
 
+from . import navigate
+
 from .spec import Calculator
 
 TRIGGER_KEY = "palette_trigger"
@@ -86,10 +88,12 @@ def open_dialog(items: List[Tuple[str, Calculator]]) -> None:
             if st.button(f"{calc.name}   ·   {category}",
                          key=f"palette_go::{calc.slug}",
                          use_container_width=True):
-                # Writing the nav widgets' session-state keys before they are
-                # built on the next run is how Streamlit lets you drive them.
-                st.session_state["nav_category"] = category
-                st.session_state[f"nav_equation::{category}"] = calc.name
+                # Staged rather than written directly, so the one place that
+                # knows how to set every navigation key - section, category
+                # and equation - stays the one place. Setting only the
+                # category here left the palette able to jump to a page in a
+                # section the sidebar was not showing.
+                navigate.request(calc.slug)
                 close()
                 st.rerun()
         if len(matches) > 12:

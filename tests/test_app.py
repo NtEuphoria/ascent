@@ -10,6 +10,8 @@ import sys
 
 import pytest
 
+from conftest import goto
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
@@ -50,8 +52,7 @@ def test_app_starts_without_error():
 @pytest.mark.parametrize("category", list(CATEGORIES.keys()))
 def test_every_calculator_in_category_renders(category):
     """Select each equation in turn and confirm the page renders cleanly."""
-    at = _fresh_app()
-    at.sidebar.selectbox[0].set_value(category).run()
+    at = goto(category)
     assert not at.exception, f"selecting category {category} raised"
 
     for name in calculator_names(category):
@@ -64,8 +65,7 @@ def test_every_calculator_in_category_renders(category):
 @pytest.mark.parametrize("category", list(CATEGORIES.keys()))
 def test_graphs_render(category):
     """Tick every 'Show graph' checkbox and confirm the plot code runs."""
-    at = _fresh_app()
-    at.sidebar.selectbox[0].set_value(category).run()
+    at = goto(category)
     for name in calculator_names(category):
         at.sidebar.radio[0].set_value(name).run()
         for checkbox in at.checkbox:
@@ -80,8 +80,7 @@ def _open_lift():
     The app can be set to reopen wherever you left off, so a test must never
     assume which page it lands on.
     """
-    at = _fresh_app()
-    at.sidebar.selectbox[0].set_value("Aerodynamics").run()
+    at = goto("Aerodynamics")
     at.sidebar.radio[0].set_value("Lift").run()
     return at
 
@@ -108,8 +107,9 @@ def test_invalid_input_shows_message_not_a_number():
 
 
 def test_switching_category_keeps_navigation_valid():
-    at = _fresh_app()
+    """Every category, in whichever section holds it, lands on one of its own
+    equations - never on a stale selection from the category before."""
     for category in list(CATEGORIES.keys()):
-        at.sidebar.selectbox[0].set_value(category).run()
-        assert not at.exception
+        at = goto(category)
+        assert not at.exception, f"{category} raised"
         assert at.sidebar.radio[0].value in calculator_names(category)

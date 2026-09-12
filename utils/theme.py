@@ -572,6 +572,65 @@ _COMPONENTS = """
 .a-ob-summary b{font-family:var(--a-font-num);font-size:var(--a-t-sm);
   font-weight:600;color:var(--a-ink);letter-spacing:-0.01em;}
 
+/* ---- Section switcher ---- */
+/* One pill group holding three icon buttons, the active one filled. The
+   container carries the track so the buttons can sit flush inside it, which
+   is what makes it read as one control rather than three. */
+.st-key-modeswitch{background:var(--a-sunken);border-radius:var(--a-r-md);
+  padding:3px;margin:0 0 var(--a-s2) 0;}
+.st-key-modeswitch [data-testid="stHorizontalBlock"]{gap:3px;}
+.st-key-modeswitch [data-testid="stColumn"]{min-width:0;}
+.st-key-modeswitch [data-testid="stButton"] button{
+  border:0!important;background:transparent!important;
+  color:var(--a-ink-faint)!important;padding:5px 0!important;
+  min-height:30px;border-radius:calc(var(--a-r-md) - 3px)!important;
+  transition:background-color var(--a-d-base) var(--a-ease),
+             color var(--a-d-base) var(--a-ease),
+             transform var(--a-d-fast) var(--a-ease-quart);}
+.st-key-modeswitch [data-testid="stButton"] button:hover{
+  color:var(--a-ink)!important;background:var(--a-border)!important;}
+.st-key-modeswitch [data-testid="stButton"] button:active{
+  transform:scale(.94);}
+/* The selected section. Raised off the track rather than merely tinted, which
+   is what carries "you are here" at icon size. */
+.st-key-modeswitch [data-testid="stButton"] button[kind="primary"]{
+  background:var(--a-surface)!important;color:var(--a-accent-ink)!important;
+  box-shadow:0 1px 2px rgba(0,0,0,0.18), inset 0 1px 0 var(--a-edge);}
+/* The label text stays in the DOM for screen readers and the tooltip, but is
+   taken out of sight; the icon is drawn by a mask so it inherits the button's
+   colour in every theme and accent. */
+.st-key-modeswitch [data-testid="stButton"] button p{
+  position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);}
+.st-key-modeswitch [data-testid="stButton"] button::before{
+  content:"";display:block;width:20px;height:20px;margin:0 auto;
+  background-color:currentColor;
+  -webkit-mask-repeat:no-repeat;mask-repeat:no-repeat;
+  -webkit-mask-position:center;mask-position:center;
+  -webkit-mask-size:contain;mask-size:contain;}
+.st-key-mode_Calculators button::before{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20x%3D%275%27%20y%3D%273%27%20width%3D%2714%27%20height%3D%2718%27%20rx%3D%272.5%27%2F%3E%3Cpath%20d%3D%27M8.5%207.5h7M9%2012h.01M12%2012h.01M15%2012h.01M9%2016h.01M12%2016h.01M15%2016h.01%27%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Crect%20x%3D%275%27%20y%3D%273%27%20width%3D%2714%27%20height%3D%2718%27%20rx%3D%272.5%27%2F%3E%3Cpath%20d%3D%27M8.5%207.5h7M9%2012h.01M12%2012h.01M15%2012h.01M9%2016h.01M12%2016h.01M15%2016h.01%27%2F%3E%3C%2Fsvg%3E");}
+.st-key-mode_Studios button::before{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M12%203.2%203.2%207.8%2012%2012.4l8.8-4.6L12%203.2Z%27%2F%3E%3Cpath%20d%3D%27M3.2%2013.2%2012%2017.8l8.8-4.6%27%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M12%203.2%203.2%207.8%2012%2012.4l8.8-4.6L12%203.2Z%27%2F%3E%3Cpath%20d%3D%27M3.2%2013.2%2012%2017.8l8.8-4.6%27%2F%3E%3C%2Fsvg%3E");}
+.st-key-mode_Live button::before{-webkit-mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M2.5%2012h4l2.6-6.4%203.9%2012.8%202.6-6.4h6%27%2F%3E%3C%2Fsvg%3E");mask-image:url("data:image/svg+xml,%3Csvg%20xmlns%3D%27http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%27%20viewBox%3D%270%200%2024%2024%27%20fill%3D%27none%27%20stroke%3D%27black%27%20stroke-width%3D%271.7%27%20stroke-linecap%3D%27round%27%20stroke-linejoin%3D%27round%27%3E%3Cpath%20d%3D%27M2.5%2012h4l2.6-6.4%203.9%2012.8%202.6-6.4h6%27%2F%3E%3C%2Fsvg%3E");}
+
+.a-mode-name{font-size:var(--a-t-sm);font-weight:620;color:var(--a-ink);
+  margin:0 0 var(--a-s3) 2px;display:flex;flex-direction:column;gap:1px;
+  animation:a-fade var(--a-d-slow) var(--a-ease-expo) both;}
+.a-mode-name span{font-size:var(--a-t-xs);font-weight:400;
+  color:var(--a-ink-faint);}
+
+/* ---- Studio steps ---- */
+/* A studio is a sequence, so the numbers are what carry it. Large enough to
+   find at a glance when scrolling back, quiet enough not to compete. */
+.a-step{display:flex;gap:var(--a-s3);align-items:baseline;
+  margin:var(--a-s6) 0 var(--a-s3) 0;
+  animation:a-rise var(--a-d-slow) var(--a-ease-expo) both;}
+.a-step > span{font-family:var(--a-font-num);font-size:var(--a-t-md);
+  font-weight:700;color:var(--a-accent-ink);line-height:1;
+  min-width:1.2em;font-variant-numeric:tabular-nums;}
+.a-step b{display:block;font-size:var(--a-t-md);font-weight:620;
+  color:var(--a-ink);letter-spacing:-0.012em;}
+.a-step i{display:block;font-style:normal;font-size:var(--a-t-sm);
+  color:var(--a-ink-faint);margin-top:1px;}
+
 /* ---- Project ---- */
 /* A bound input is a fact, not a control. It reads as a value the page has
    been given rather than one it is waiting for. */

@@ -40,6 +40,11 @@ def clean_project():
     path = os.path.join(_STORE, "project.json")
     if os.path.exists(path):
         os.remove(path)
+    # Visiting a page records it as the last one, in the same shared store, so
+    # one test's navigation would decide where the next test starts.
+    settings_path = os.path.join(_STORE, "settings.json")
+    with open(settings_path, "w", encoding="utf-8") as handle:
+        json.dump({"onboarded": True}, handle)
     yield
     if os.path.exists(path):
         os.remove(path)
@@ -63,3 +68,33 @@ def real_settings_file():
         shutil.move(backup, path)
     elif os.path.exists(path):
         os.remove(path)
+
+
+def goto(category, app_path=None):
+    """A fresh AppTest already navigated to `category`.
+
+    Fresh rather than mutating a running one. AppTest serialises the previous
+    run's widgets before each new run, so pointing an existing test at a
+    category outside the currently-rendered section raises while validating the
+    stale category dropdown - which no longer even exists in a section holding
+    one category.
+
+    Only the section and the category are set; the equation follows from them,
+    the same way a restored page or a deep link works in the app.
+    """
+    import os
+
+    from streamlit.testing.v1 import AppTest
+
+    import app
+
+    if app_path is None:
+        app_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "app.py")
+    at = AppTest.from_file(app_path, default_timeout=120)
+    at.session_state["nav_mode"] = app.mode_of_category().get(category,
+                                                              "Calculators")
+    at.session_state["nav_category"] = category
+    at.run()
+    return at

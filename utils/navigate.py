@@ -12,7 +12,7 @@ link to every other part.
 """
 from __future__ import annotations
 
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 
 import streamlit as st
 
@@ -28,8 +28,15 @@ def pending() -> bool:
     return _REQUEST in st.session_state
 
 
-def apply(by_slug: Dict[str, Tuple[str, object]]) -> None:
-    """Consume a staged request. Call before building navigation widgets."""
+def apply(by_slug: Dict[str, Tuple[str, object]],
+          modes: Optional[Dict[str, str]] = None) -> None:
+    """Consume a staged request. Call before building navigation widgets.
+
+    The section is set as well as the category, so a link from a studio to a
+    calculator - or a command-palette jump - lands on the page rather than
+    quietly switching the category underneath a section that does not contain
+    it.
+    """
     slug = st.session_state.pop(_REQUEST, None)
     if slug is None:
         return
@@ -37,5 +44,7 @@ def apply(by_slug: Dict[str, Tuple[str, object]]) -> None:
     if entry is None:
         return                    # a stale link: stay where we are
     category, calc = entry
+    if modes and category in modes:
+        st.session_state["nav_mode"] = modes[category]
     st.session_state["nav_category"] = category
     st.session_state[f"nav_equation::{category}"] = calc.name

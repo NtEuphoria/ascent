@@ -15,10 +15,11 @@ import sys
 
 import pytest
 
+from conftest import goto
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 
-from streamlit.testing.v1 import AppTest  # noqa: E402
 
 APP_PATH = os.path.join(ROOT, "app.py")
 
@@ -129,9 +130,7 @@ def _headline(at):
 
 @pytest.mark.parametrize("category", list(BASELINES.keys()))
 def test_headline_values_unchanged(category):
-    at = AppTest.from_file(APP_PATH, default_timeout=120)
-    at.run()
-    at.sidebar.selectbox[0].set_value(category).run()
+    at = goto(category)
 
     for name, (expected_value, expected_unit) in BASELINES[category].items():
         at.sidebar.radio[0].set_value(name).run()
