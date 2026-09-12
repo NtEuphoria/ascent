@@ -173,6 +173,27 @@ def _live_view(prefs: dict) -> None:
                 if st.session_state.get(f"live_ch_{name}", True)]
     charts.stream_chart(samples, selected,
                         prefs.get("appearance", "Follow system"))
+    _export(source)
+
+
+def _export(source) -> None:
+    """The CSV button has to live inside the refreshing fragment.
+
+    Streamlit builds a download button's payload at render time, so one drawn
+    outside this fragment keeps whatever history existed on the first run -
+    which was one sample. It offered "Download all 1 samples" beside a readout
+    saying 147, and would have handed over a one-row file.
+    """
+    everything = source.history()
+    if not everything:
+        return
+    st.download_button(
+        f"Download all {len(everything):,} samples (CSV)",
+        data=livesource.to_csv(everything).encode("utf-8"),
+        file_name=f"ascent-{source.kind}-"
+                  f"{time.strftime('%Y%m%d-%H%M%S')}.csv",
+        mime="text/csv",
+        key="live_download")
 
 
 # ---------------------------------------------------------------------------
@@ -211,17 +232,6 @@ def render_monitor(prefs=None) -> None:
                         st.checkbox(name, value=True, key=f"live_ch_{name}")
 
     _live_view(prefs)
-
-    if source is not None and source.history():
-        st.write("")
-        samples = source.history()
-        st.download_button(
-            f"Download all {len(samples):,} samples (CSV)",
-            data=livesource.to_csv(samples).encode("utf-8"),
-            file_name=f"ascent-{source.kind}-"
-                      f"{time.strftime('%Y%m%d-%H%M%S')}.csv",
-            mime="text/csv",
-            key="live_download")
 
     ui.assumptions([
         "Samples are timestamped when this Mac receives them, not when the "

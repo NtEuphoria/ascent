@@ -10,7 +10,7 @@ from __future__ import annotations
 import numpy as np
 
 from utils import validation as v
-from utils.constants import (A_SL, GAMMA_AIR, G0, P_SL, RHO_SL, R_AIR,
+from utils.constants import (GAMMA_AIR, G0, P_SL, RHO_SL, R_AIR,
                              T_SL_K)
 from utils.spec import (Calculator, Check, Field, Output, Reference, Secondary,
                         Sweep)
