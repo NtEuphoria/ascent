@@ -381,6 +381,13 @@ _COMPONENTS = """
 .a-sec-u{font-family:var(--a-font-ui);font-size:var(--a-t-sm);
   font-weight:400;color:var(--a-ink-muted);letter-spacing:0;}
 
+/* A live readout. Smaller than the result headline - there are several of
+   them and none is the answer - but the same instrument face, and tabular so
+   a changing value does not shuffle sideways twice a second. */
+.a-live-value{font-family:var(--a-font-num);font-size:var(--a-t-lg);
+  font-weight:600;color:var(--a-ink);font-variant-numeric:tabular-nums;
+  letter-spacing:-0.015em;line-height:1.25;}
+
 /* ---- Lists ---- */
 ul.a-tight{margin:2px 0 0 0;padding-left:var(--a-s4);
   font-size:var(--a-t-sm);color:var(--a-ink-muted);line-height:1.65;}

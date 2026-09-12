@@ -8,5 +8,10 @@ streamlit==1.50.0
 numpy>=1.24,<3
 matplotlib>=3.7,<4
 
+# Serial support for the Live data section. Pure Python, no compiler needed.
+# Without it the live pages still load and the simulated signal still works;
+# only reading a real device is unavailable.
+pyserial==3.5
+
 # Optional, only needed to run the test suite (pytest tests/)
 # pytest>=7.0

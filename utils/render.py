@@ -18,6 +18,7 @@ Two implementation details matter and are easy to get wrong:
 """
 from __future__ import annotations
 
+import inspect
 from typing import Any, Dict, List
 
 import numpy as np
@@ -118,7 +119,7 @@ def _sweep_series(calc: Calculator, values: Inputs, sweep: Sweep):
 
 
 def _draw_graph(calc: Calculator, values: Inputs, result: float, sweep: Sweep,
-                appearance: str = "Follow system") -> None:
+                index: int = 0, appearance: str = "Follow system") -> None:
     field = next((f for f in calc.inputs if f.key == sweep.over), None)
     xs, ys = _sweep_series(calc, values, sweep)
     current = float(values[sweep.over])
@@ -134,10 +135,11 @@ def _draw_graph(calc: Calculator, values: Inputs, result: float, sweep: Sweep,
         log_y=sweep.log_y,
         appearance=appearance,
     )
-    _download_series(calc, sweep, field, xs, ys)
+    _download_series(calc, sweep, field, xs, ys, index)
 
 
-def _download_series(calc: Calculator, sweep: Sweep, field, xs, ys) -> None:
+def _download_series(calc: Calculator, sweep: Sweep, field, xs, ys,
+                     index: int) -> None:
     """Offer the plotted points as CSV.
 
     A curve you can only look at is a picture; a curve you can export is data.
@@ -154,7 +156,7 @@ def _download_series(calc: Calculator, sweep: Sweep, field, xs, ys) -> None:
         data="\n".join(rows).encode("utf-8"),
         file_name=f"{calc.slug.replace('.', '-')}-{sweep.over}.csv",
         mime="text/csv",
-        key=f"dl_{calc.prefix}_{sweep.over}",
+        key=f"dl_{calc.prefix}_{index}_{sweep.over}",
     )
 
 
@@ -259,9 +261,9 @@ def _analysis(calc: Calculator, values: Inputs, result, catalogue,
     """
     labels, drawers = [], []
 
-    for sweep in calc.graphs:
+    for index, sweep in enumerate(calc.graphs):
         labels.append(sweep.title.split(" (")[0][:34])
-        drawers.append(("graph", sweep))
+        drawers.append(("graph", (sweep, index)))
     if calc.sensitivity and calc.compute is not None:
         labels.append("What drives this")
         drawers.append(("influence", None))
@@ -281,7 +283,7 @@ def _analysis(calc: Calculator, values: Inputs, result, catalogue,
                 if result is None:
                     st.caption("Fix the inputs above to draw this.")
                 else:
-                    _draw_graph(calc, values, result, payload,
+                    _draw_graph(calc, values, result, payload[0], payload[1],
                                 prefs.get("appearance", "Follow system"))
             elif kind == "influence":
                 if result is None:
@@ -304,12 +306,29 @@ def _reference_table(table) -> None:
         st.caption(table.note)
 
 
+def _call_render(fn, prefs: dict, catalogue: dict) -> None:
+    """Call an imperative page, passing only what it asks for.
+
+    Most of these pages predate the renderer having anything to hand them and
+    take no arguments at all. Inspecting the signature lets the live pages -
+    which genuinely need preferences and the catalogue - opt in without a
+    sweeping edit to every page that does not.
+    """
+    parameters = inspect.signature(fn).parameters
+    kwargs = {}
+    if "prefs" in parameters:
+        kwargs["prefs"] = prefs
+    if "catalogue" in parameters:
+        kwargs["catalogue"] = catalogue
+    fn(**kwargs)
+
+
 def render(calc: Calculator, prefs=None, catalogue=None) -> None:
     """Draw a complete calculator page."""
-    if calc.render is not None:          # imperative escape hatch
-        calc.render()
-        return
     prefs = prefs or {}
+    if calc.render is not None:          # imperative escape hatch
+        _call_render(calc.render, prefs, catalogue or {})
+        return
 
     # The header is outside the fragment: it is static for a given calculator,
     # and Reset deliberately triggers a full rerun so every widget rebuilds.

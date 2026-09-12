@@ -114,3 +114,86 @@ def sweep_chart(xs, ys, x_label: str, y_label: str, title: str,
              .configure_title(fontSize=13, anchor="start", fontWeight=600)
              .configure_view(strokeWidth=0))
     st.altair_chart(chart, use_container_width=True)
+
+
+# Series colours for the live view. Picked to stay distinguishable on both
+# grounds and to survive the most common form of colour blindness - a live
+# plot is useless if two traces cannot be told apart.
+SERIES = ["#4a90d9", "#e0603f", "#39a06a", "#b48ae8", "#d9a33a", "#3fb8c4",
+          "#d95f8a", "#8a94a6"]
+
+MAX_POINTS = 1200
+"""Points drawn per channel. Above roughly this the browser spends longer
+laying the path out than the eye gains from it, and the live view is redrawn
+twice a second."""
+
+
+def _thin(frame: "pd.DataFrame", limit: int = MAX_POINTS) -> "pd.DataFrame":
+    """Keep every nth row. Deliberately not a mean: averaging a live signal
+    hides exactly the spikes someone is watching for."""
+    if len(frame) <= limit:
+        return frame
+    return frame.iloc[:: max(1, len(frame) // limit)]
+
+
+def stream_chart(samples, channels, appearance: str = "Follow system",
+                 height: int = 320, y_label: str = "Value") -> None:
+    """A live multi-channel trace against elapsed time.
+
+    `samples` is the (timestamp, {channel: value}) list a Source hands back.
+    Channels share one y axis, which is how every serial plotter behaves and
+    what people expect - but it does mean a signal in volts and one in degrees
+    will squash each other, so the page lets channels be switched off.
+    """
+    if not samples or not channels:
+        st.caption("No samples yet.")
+        return
+
+    start = samples[0][0]
+    rows = []
+    for stamp, values in samples:
+        elapsed = stamp - start
+        for name in channels:
+            if name in values:
+                rows.append((elapsed, name, float(values[name])))
+    if not rows:
+        st.caption("No samples yet for the selected channels.")
+        return
+
+    frame = pd.DataFrame(rows, columns=["t", "channel", "value"])
+    frame = (frame.groupby("channel", group_keys=False)
+             .apply(_thin)
+             .reset_index(drop=True))
+
+    colours = alt.Scale(domain=list(channels),
+                        range=SERIES[:len(channels)] or SERIES)
+    chart = (alt.Chart(frame)
+             .mark_line(strokeWidth=1.8, interpolate="linear")
+             .encode(
+                 x=alt.X("t:Q", title="Elapsed [s]",
+                         scale=alt.Scale(nice=False, zero=False)),
+                 y=alt.Y("value:Q", title=y_label,
+                         scale=alt.Scale(zero=False, nice=True)),
+                 color=alt.Color("channel:N", scale=colours,
+                                 legend=alt.Legend(title=None, orient="top")),
+                 tooltip=[alt.Tooltip("t:Q", title="t [s]", format=".2f"),
+                          alt.Tooltip("channel:N", title="Channel"),
+                          alt.Tooltip("value:Q", title="Value",
+                                      format=".5~g")])
+             .properties(height=height, background="transparent"))
+
+    if appearance in ("Light", "Dark"):
+        palette = _CHART_LIGHT if appearance == "Light" else _CHART_DARK
+        chart = (chart
+                 .configure_view(strokeWidth=0)
+                 .configure_legend(labelColor=palette["text"])
+                 .configure_axis(labelColor=palette["text"],
+                                 titleColor=palette["title"],
+                                 gridColor=palette["grid"],
+                                 domainColor=palette["domain"],
+                                 tickColor=palette["domain"]))
+        st.altair_chart(chart, use_container_width=True, theme=None)
+        return
+
+    st.altair_chart(chart.configure_view(strokeWidth=0),
+                    use_container_width=True)

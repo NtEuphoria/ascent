@@ -1,0 +1,404 @@
+"""Live data: read a device that is actually plugged in.
+
+Everything else in ASCENT answers "what would happen if". These two pages
+answer "what is happening", and then let the two meet: a channel coming off a
+board can be fed straight into any equation in the app, so a measured current
+becomes a predicted flight time while you watch.
+
+Both pages use the imperative `render=` escape hatch. They are not equations -
+there is no single headline number, the content changes twice a second, and
+the controls are a connection rather than a set of values - so the declarative
+spec would have to grow a dialect that exists for two pages.
+
+The transport lives in utils/livesource.py and the parsing in utils/stream.py;
+this file is only the screen.
+"""
+from __future__ import annotations
+
+import time
+
+import streamlit as st
+
+from utils import charts, livesource, ui
+from utils.formatting import format_number
+from utils.spec import Calculator, Inputs
+
+REFRESH_SECONDS = 0.5
+"""How often the live view redraws. Fast enough to feel continuous, slow
+enough that the page is not permanently mid-rerun - Streamlit dims the whole
+page once a rerun passes 500 ms, and a view that redraws faster than it
+renders never stops flickering."""
+
+WINDOW_CHOICES = {"Last 10 s": 10.0, "Last 30 s": 30.0, "Last 2 min": 120.0,
+                  "Last 10 min": 600.0, "Everything": None}
+
+
+# ---------------------------------------------------------------------------
+# Connection controls (outside the auto-refreshing fragment)
+# ---------------------------------------------------------------------------
+def _connection_panel() -> None:
+    source = livesource.active()
+
+    if source is not None and source.running:
+        left, right = st.columns([3, 1], vertical_alignment="bottom")
+        with left:
+            st.markdown(f'<div class="a-note">Connected to '
+                        f'<b>{source.label}</b>.</div>', unsafe_allow_html=True)
+        with right:
+            if st.button("Disconnect", key="live_disconnect",
+                         use_container_width=True):
+                livesource.disconnect()
+                st.rerun()
+        return
+
+    ports = livesource.available_ports()
+    if not livesource.serial_available():
+        st.warning(
+            "Serial support is not installed in this environment, so only the "
+            "simulated signal is available. Reinstall the app, or run "
+            "`pip install pyserial` in its environment.")
+    elif not ports:
+        st.info(
+            "No serial device found. Plug in a board over USB and press "
+            "Rescan. On macOS a board usually appears as `/dev/cu.usbmodem…` "
+            "or `/dev/cu.usbserial…`; you may need the CH340 or CP210x driver "
+            "for some clone boards.")
+
+    port_column, baud_column, connect_column = st.columns([2.4, 1, 1],
+                                                          vertical_alignment="bottom")
+    with port_column:
+        labels = [f"{device}  ·  {description}" for device, description in ports]
+        chosen = st.selectbox("Serial port", labels or ["No device found"],
+                              key="live_port",
+                              disabled=not ports,
+                              help="The device to read from.")
+    with baud_column:
+        baud = st.selectbox("Baud", livesource.BAUD_RATES,
+                            index=livesource.BAUD_RATES.index(
+                                livesource.DEFAULT_BAUD),
+                            key="live_baud",
+                            help="Must match the value in the device's "
+                                 "Serial.begin(). A wrong rate reads as "
+                                 "garbage, not as silence.")
+    with connect_column:
+        if st.button("Connect", key="live_connect", type="primary",
+                     disabled=not ports, use_container_width=True):
+            device = ports[labels.index(chosen)][0]
+            livesource.connect(livesource.SerialSource(device, int(baud)))
+            st.rerun()
+
+    rescan, demo = st.columns([1, 1])
+    with rescan:
+        if st.button("Rescan ports", key="live_rescan",
+                     use_container_width=True):
+            st.rerun()
+    with demo:
+        if st.button("Use a simulated signal", key="live_demo",
+                     use_container_width=True,
+                     help="A synthetic four-channel stream, so the page can be "
+                          "tried with nothing plugged in."):
+            livesource.connect(livesource.DemoSource())
+            st.rerun()
+
+    if source is not None and source.error:
+        st.error(f"Could not read that port: {source.error}")
+
+
+def _readouts(source) -> None:
+    """One large number per channel, in the same face as every other result."""
+    latest = source.latest()
+    if not latest:
+        return
+    names = list(latest)
+    for start in range(0, len(names), 4):
+        for column, name in zip(st.columns(4), names[start:start + 4]):
+            with column:
+                st.markdown(
+                    f'<div class="a-sec-k">{name}</div>'
+                    f'<div class="a-live-value">{format_number(latest[name], 5)}'
+                    f'</div>', unsafe_allow_html=True)
+
+
+def _status_line(source) -> None:
+    samples = source.history()
+    rate = source.rate_hz()
+    elapsed = time.time() - source.started_at if source.started_at else 0.0
+    parsed = source.parser.lines_parsed
+    seen = source.parser.lines_seen
+    bits = [f"{len(samples):,} samples",
+            f"{rate:.1f} Hz",
+            f"{elapsed:.0f} s connected"]
+    if seen:
+        bits.append(f"{parsed}/{seen} lines understood")
+    st.caption("  ·  ".join(bits))
+    if seen and parsed == 0:
+        st.warning(
+            "Lines are arriving but none of them parse. The usual cause is a "
+            "baud rate that does not match the device. Print numbers as CSV "
+            "(`1.4,-0.2`), as `name=value` pairs, or as one JSON object per "
+            f"line. Last line seen: `{source.parser.last_unparsed}`")
+
+
+@st.fragment(run_every=REFRESH_SECONDS)
+def _live_view(prefs: dict) -> None:
+    """The part that redraws on its own.
+
+    Kept in a fragment so the twice-a-second refresh reruns this block only.
+    A whole-page rerun at this rate would rebuild the sidebar, every category
+    and the header 120 times a minute.
+    """
+    source = livesource.active()
+    if source is None or not source.running:
+        st.markdown('<div class="a-note">Not connected. Choose a port above, '
+                    'or start the simulated signal to see how this works.</div>',
+                    unsafe_allow_html=True)
+        return
+
+    _status_line(source)
+    _readouts(source)
+
+    channels = source.channels()
+    if not channels:
+        st.caption("Waiting for the first sample…")
+        return
+
+    window_label = st.session_state.get("live_window", "Last 30 s")
+    seconds = WINDOW_CHOICES.get(window_label, 30.0)
+    samples = source.history()
+    if seconds is not None:
+        cutoff = time.time() - seconds
+        samples = [pair for pair in samples if pair[0] >= cutoff]
+
+    selected = [name for name in channels
+                if st.session_state.get(f"live_ch_{name}", True)]
+    charts.stream_chart(samples, selected,
+                        prefs.get("appearance", "Follow system"))
+
+
+# ---------------------------------------------------------------------------
+# Page 1 - the monitor
+# ---------------------------------------------------------------------------
+def render_monitor(prefs=None) -> None:
+    prefs = prefs or {}
+    ui.page_header(
+        "Live monitor",
+        r"\text{device} \;\longrightarrow\; \text{channels}(t)",
+        "Read a board that is plugged into this Mac over USB and plot what it "
+        "sends. Print numbers from your sketch as CSV, as <code>name=value</code> "
+        "pairs, or as one JSON object per line, and they are picked up and "
+        "named automatically - a header row like <code>pitch,roll</code> names "
+        "the columns for everything after it.",
+        "live_monitor")
+
+    _connection_panel()
+    st.write("")
+
+    source = livesource.active()
+    if source is not None and source.running:
+        channels = source.channels()
+        if channels:
+            st.markdown('<div class="a-label">Display</div>',
+                        unsafe_allow_html=True)
+            window_column, channel_column = st.columns([1, 3])
+            with window_column:
+                st.selectbox("Time window", list(WINDOW_CHOICES),
+                             index=1, key="live_window",
+                             label_visibility="collapsed")
+            with channel_column:
+                for column, name in zip(st.columns(min(len(channels), 6)),
+                                        channels[:6]):
+                    with column:
+                        st.checkbox(name, value=True, key=f"live_ch_{name}")
+
+    _live_view(prefs)
+
+    if source is not None and source.history():
+        st.write("")
+        samples = source.history()
+        st.download_button(
+            f"Download all {len(samples):,} samples (CSV)",
+            data=livesource.to_csv(samples).encode("utf-8"),
+            file_name=f"ascent-{source.kind}-"
+                      f"{time.strftime('%Y%m%d-%H%M%S')}.csv",
+            mime="text/csv",
+            key="live_download")
+
+    ui.assumptions([
+        "Samples are timestamped when this Mac receives them, not when the "
+        "device measured them. USB buffering means the two differ by a few "
+        "milliseconds, and by much more if the device sends in bursts.",
+        "The sample rate shown is the rate lines arrive and parse, which is "
+        "a lower bound on the device's own loop rate - dropped or unparsed "
+        "lines do not appear.",
+        "Only lines that parse cleanly are plotted. A line containing any "
+        "non-numeric field is discarded rather than half-read, so a value "
+        "missing from the chart means it was never understood.",
+        "Channels share one y axis. A signal in volts and one in degrees will "
+        "squash each other; switch channels off to read one clearly.",
+        f"History is capped at {livesource.HISTORY:,} samples. Older samples "
+        "are dropped, including from the CSV export, so download long runs "
+        "before they scroll off.",
+        "The simulated signal is synthetic. It is there to demonstrate the "
+        "page and is never a measurement of anything.",
+    ])
+
+    ui.reference(
+        variables=[
+            ("CSV", "1.4,-0.2  - named by an earlier header row if one was sent",
+             "-"),
+            ("Pairs", "pitch=1.4,roll=-0.2  - names come from the line itself",
+             "-"),
+            ("JSON", '{"pitch": 1.4, "roll": -0.2}  - one object per line', "-"),
+            ("Single", "21.5  - becomes a channel called `value`", "-"),
+        ],
+        example=(
+            "An ESP32 logging a battery under load. The sketch prints "
+            "<code>Serial.println(String(v) + \",\" + String(i));</code> after "
+            "a one-off <code>Serial.println(\"voltage,current\");</code>, and "
+            "both channels appear named. Watch the pack sag as current rises, "
+            "then export the run and compare it against the voltage-sag "
+            "calculator."),
+    )
+
+
+# ---------------------------------------------------------------------------
+# Page 2 - live data driving an equation
+# ---------------------------------------------------------------------------
+def _numeric_inputs(calc: Calculator):
+    return [field for field in calc.inputs
+            if field.kind in ("float", "int", "slider")]
+
+
+def render_bridge(prefs=None, catalogue=None) -> None:
+    """Map live channels onto a calculator's inputs and watch the result."""
+    prefs = prefs or {}
+    catalogue = catalogue or {}
+    ui.page_header(
+        "Live calculation",
+        r"\text{channel}(t) \;\longrightarrow\; f(\ldots) \;\longrightarrow\; "
+        r"\text{result}(t)",
+        "Point a live channel at any equation in the app and the answer updates "
+        "as the data arrives. A measured current becomes a predicted endurance; "
+        "a measured airspeed becomes lift. Inputs you do not map keep their "
+        "typed value, so only what you are actually measuring has to come from "
+        "the device.",
+        "live_bridge")
+
+    source = livesource.active()
+    if source is None or not source.running:
+        st.info("Nothing is connected. Open **Live monitor** to connect a "
+                "device or start the simulated signal, then come back.")
+        return
+
+    usable = [(slug, entry) for slug, entry in catalogue.items()
+              if entry[1].compute is not None and _numeric_inputs(entry[1])]
+    if not usable:
+        st.caption("No calculators are available to drive.")
+        return
+
+    labels = {f"{entry[1].name}  ·  {entry[0]}": slug for slug, entry in usable}
+    chosen_label = st.selectbox("Equation to drive", sorted(labels),
+                                key="bridge_calc")
+    calc = catalogue[labels[chosen_label]][1]
+
+    channels = source.channels()
+    if not channels:
+        st.caption("Waiting for the first sample…")
+        return
+
+    st.markdown('<div class="a-label">Map channels onto inputs</div>',
+                unsafe_allow_html=True)
+    fields = _numeric_inputs(calc)
+    mapping = {}
+    typed = {}
+    for row_start in range(0, len(fields), 2):
+        for column, field in zip(st.columns(2), fields[row_start:row_start + 2]):
+            with column:
+                source_choice = st.selectbox(
+                    f"{field.label} [{field.unit}]" if field.unit
+                    else field.label,
+                    ["Use a typed value"] + channels,
+                    key=f"bridge_{calc.prefix}_{field.key}")
+                if source_choice == "Use a typed value":
+                    typed[field.key] = st.number_input(
+                        f"{field.label} value", value=float(field.default),
+                        key=f"bridge_val_{calc.prefix}_{field.key}",
+                        label_visibility="collapsed", format="%.6g")
+                else:
+                    mapping[field.key] = source_choice
+                    st.caption(f"from `{source_choice}`")
+
+    for field in calc.inputs:
+        if field.key not in typed and field.key not in mapping:
+            # Choice and weight inputs are not mappable from a numeric stream;
+            # they fall back to the spec's own default so the page still runs.
+            typed[field.key] = field.default
+
+    if not mapping:
+        st.caption("Map at least one input to a channel to make this live.")
+
+    st.write("")
+    _bridge_result(calc, mapping, typed, prefs)
+
+    ui.assumptions([
+        "Units are not converted. The channel must already be in the unit the "
+        "input asks for - a current in milliamps fed into an input expecting "
+        "amps is wrong by a thousand, and nothing here can detect that.",
+        "Each update uses the most recent sample only. It is an instantaneous "
+        "reading, not an average, so a noisy channel gives a noisy result.",
+        "Inputs left unmapped hold the value shown next to them. They do not "
+        "track anything.",
+        "The equation's own assumptions still apply in full. Live data makes "
+        "the inputs real; it does not make the model more valid.",
+    ])
+
+
+@st.fragment(run_every=REFRESH_SECONDS)
+def _bridge_result(calc: Calculator, mapping, typed, prefs: dict) -> None:
+    source = livesource.active()
+    if source is None or not source.running:
+        st.caption("Disconnected.")
+        return
+    latest = source.latest()
+    values = dict(typed)
+    missing = []
+    for key, channel in mapping.items():
+        if channel in latest:
+            values[key] = float(latest[channel])
+        else:
+            missing.append(channel)
+
+    if missing:
+        st.caption("Waiting for: " + ", ".join(sorted(set(missing))))
+        return
+
+    try:
+        result = calc.compute(Inputs(values))
+    except Exception as exc:
+        st.error(f"{exc}")
+        return
+
+    secondary = []
+    for item in calc.secondary:
+        try:
+            secondary.append((item.label, item.fn(Inputs(values), result),
+                              item.unit))
+        except Exception:
+            continue
+    ui.result(calc.result.label, result, calc.result.unit,
+              secondary=secondary,
+              sig=prefs.get("significant_figures", calc.result.sig))
+    st.caption("Live · updating " + f"{1 / REFRESH_SECONDS:.0f} times a second "
+               "from " + ", ".join(f"`{c}`" for c in sorted(set(mapping.values()))))
+
+
+CALCULATORS = [
+    Calculator(slug="live.monitor", name="Live monitor", latex="",
+               explanation="", render=render_monitor,
+               keywords=("serial", "usb", "telemetry", "arduino", "esp32",
+                         "sensor", "plot", "log", "record", "live", "data")),
+    Calculator(slug="live.bridge", name="Live calculation", latex="",
+               explanation="", render=render_bridge,
+               keywords=("live", "sensor", "drive", "telemetry", "real time",
+                         "measured", "bridge")),
+]

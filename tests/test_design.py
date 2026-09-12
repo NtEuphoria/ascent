@@ -181,3 +181,33 @@ def test_the_mark_never_follows_the_accent_setting():
         blues.add(css.split("--a-mark:", 1)[1].split(";", 1)[0])
     assert blues == {theme.LIGHT["mark"]}
     assert ".a-brand svg path{fill:var(--a-mark);}" in theme._COMPONENTS
+
+
+# ---------------------------------------------------------------------------
+# Widget keys
+# ---------------------------------------------------------------------------
+def test_two_graphs_over_the_same_input_get_distinct_keys():
+    """Drag vs velocity and power-required vs velocity are both legitimate
+    graphs of the same page over the same input. Keying the download button on
+    the swept field alone made Streamlit refuse to render the page at all."""
+    from utils.render import _download_series
+    from utils.spec import Calculator, Sweep
+
+    calc = Calculator(slug="a.b", name="n", latex="", explanation="")
+    sweeps = [Sweep(over="v", y_label="y", title="one"),
+              Sweep(over="v", y_label="y", title="two")]
+    keys = set()
+    for index, sweep in enumerate(sweeps):
+        captured = {}
+
+        def fake(label, data, file_name, mime, key):
+            captured["key"] = key
+
+        import streamlit as st
+        original, st.download_button = st.download_button, fake
+        try:
+            _download_series(calc, sweep, None, [0.0, 1.0], [0.0, 1.0], index)
+        finally:
+            st.download_button = original
+        keys.add(captured["key"])
+    assert len(keys) == 2

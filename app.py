@@ -12,7 +12,7 @@ from __future__ import annotations
 import streamlit as st
 
 from calculators import (aerodynamics, controls, drones, electrical, flight,
-                         materials, mechanical, propulsion, reference,
+                         live, materials, mechanical, propulsion, reference,
                          robotics, rotational, structures, units)
 from utils import navigate, palette
 from utils import render as renderer
@@ -39,6 +39,7 @@ CATEGORIES = {
     "Robotics": robotics.CALCULATORS,
     "Electrical / robotics": electrical.CALCULATORS,
     "Control systems": controls.CALCULATORS,
+    "Live data": live.CALCULATORS,
     "Unit converter": units.CALCULATORS,
     "Constants / reference": reference.CALCULATORS,
 }
