@@ -100,26 +100,6 @@ def test_motion_setting_shortens_durations():
     assert "prefers-reduced-motion" in theme._tokens("Light", "Full")
 
 
-@pytest.fixture
-def real_settings_file():
-    """Swap the app's real settings file, restoring it afterwards.
-
-    The app loads settings from a fixed path at start-up, so an end-to-end
-    check has to go through that file rather than a monkeypatched module.
-    """
-    import shutil
-    path = settings.SETTINGS_PATH
-    backup = path + ".test-backup"
-    existed = os.path.exists(path)
-    if existed:
-        shutil.copy2(path, backup)
-    yield path
-    if existed:
-        shutil.move(backup, path)
-    elif os.path.exists(path):
-        os.remove(path)
-
-
 def _headline(app_root):
     import re
     from streamlit.testing.v1 import AppTest
@@ -132,17 +112,20 @@ def _headline(app_root):
 
 def test_significant_figures_change_the_displayed_result(real_settings_file):
     """The setting must actually reach the rendered number."""
-    settings.save({"appearance": "Follow system", "motion": "Full",
+    settings.save({"onboarded": True,
+                   "appearance": "Follow system", "motion": "Full",
                    "significant_figures": 4, "show_reference": True})
     assert _headline(ROOT) == "12,403"
 
-    settings.save({"appearance": "Follow system", "motion": "Full",
+    settings.save({"onboarded": True,
+                   "appearance": "Follow system", "motion": "Full",
                    "significant_figures": 6, "show_reference": True})
     assert _headline(ROOT) == "12,403.1"
 
     # Whole numbers are never truncated, so a lower setting cannot turn
     # 12,403 into 12,400. It affects decimals, not real precision.
-    settings.save({"appearance": "Follow system", "motion": "Full",
+    settings.save({"onboarded": True,
+                   "appearance": "Follow system", "motion": "Full",
                    "significant_figures": 3, "show_reference": True})
     assert _headline(ROOT) == "12,403"
 
@@ -156,11 +139,13 @@ def test_reference_toggle_hides_the_reference_block(real_settings_file):
         at.run()
         return " ".join(block.value for block in at.markdown)
 
-    settings.save({"appearance": "Follow system", "motion": "Full",
+    settings.save({"onboarded": True,
+                   "appearance": "Follow system", "motion": "Full",
                    "significant_figures": 4, "show_reference": True})
     assert "Where this is used" in rendered()
 
-    settings.save({"appearance": "Follow system", "motion": "Full",
+    settings.save({"onboarded": True,
+                   "appearance": "Follow system", "motion": "Full",
                    "significant_figures": 4, "show_reference": False})
     shown = rendered()
     assert "Where this is used" not in shown

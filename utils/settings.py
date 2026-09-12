@@ -16,7 +16,12 @@ from typing import Any, Dict
 
 import streamlit as st
 
-SUPPORT_DIR = os.path.expanduser("~/Library/Application Support/ASCENT")
+# ASCENT_SETTINGS_DIR redirects the whole store. The test suite uses it so a
+# headless render reads a fixture rather than whatever the person running the
+# tests last clicked in the real app - which it did, and which made results
+# depend on the machine.
+SUPPORT_DIR = (os.environ.get("ASCENT_SETTINGS_DIR")
+               or os.path.expanduser("~/Library/Application Support/ASCENT"))
 SETTINGS_PATH = os.path.join(SUPPORT_DIR, "settings.json")
 
 APPEARANCE_OPTIONS = ["Follow system", "Light", "Dark"]
@@ -27,6 +32,11 @@ SIGNIFICANT_FIGURE_OPTIONS = [3, 4, 5, 6]
 START_PAGE_OPTIONS = ["Where I left off", "First calculator"]
 
 MAX_RECENTS = 6
+
+SIDEBAR_FAVOURITES = 5
+"""How many favourites the sidebar shows. First-run setup pins exactly this
+many, so the number it promises is the number that appears - it offered eight
+and showed five, which is a small lie told on the first screen of the app."""
 
 DEFAULTS: Dict[str, Any] = {
     # Appearance
@@ -45,6 +55,9 @@ DEFAULTS: Dict[str, Any] = {
     "favourites": [],
     "recents": [],
     "last_page": "",
+    # First run. False until the setup flow finishes, so a fresh install gets
+    # the welcome and nobody else ever sees it again.
+    "onboarded": False,
 }
 # Note: there is deliberately no setting to hide assumptions. Stating the
 # assumptions under every result is an accuracy requirement of this app, not a
@@ -59,7 +72,8 @@ _CHOICES = {
     "significant_figures": SIGNIFICANT_FIGURE_OPTIONS,
     "start_page": START_PAGE_OPTIONS,
 }
-_FLAGS = ("thousands_separator", "show_reference", "show_examples")
+_FLAGS = ("thousands_separator", "show_reference", "show_examples",
+          "onboarded")
 _SLUG_LISTS = ("favourites", "recents")
 
 
@@ -124,6 +138,7 @@ def reset() -> bool:
     """Restore every setting to its default, keeping favourites."""
     current = load()
     fresh = dict(DEFAULTS)
+    fresh["onboarded"] = current.get("onboarded", True)
     fresh["favourites"] = current.get("favourites", [])
     return save(fresh)
 
@@ -316,5 +331,15 @@ def panel(calculator_count: int = 0, category_count: int = 0,
                 close()
                 st.rerun()
             st.caption("Favourites are kept.")
+            # Setup is otherwise a screen you can see exactly once, on a
+            # machine you have already set up - which makes it impossible to
+            # revisit a choice you made in twenty seconds on first launch.
+            if st.button("Run first-time setup again", key="set_onboard",
+                         use_container_width=True):
+                update(onboarded=False)
+                close()
+                st.rerun()
+            st.caption("Walks through appearance, accent and what you work on. "
+                       "Your favourites are replaced by the new selection.")
 
     _dialog()

@@ -14,7 +14,7 @@ import streamlit as st
 from calculators import (aerodynamics, controls, drones, electrical, flight,
                          live, materials, mechanical, propulsion, reference,
                          robotics, rotational, structures, units)
-from utils import navigate, palette
+from utils import navigate, onboarding, palette
 from utils import render as renderer
 from utils import settings as user_settings
 from utils import ui
@@ -57,7 +57,8 @@ def all_calculators():
 
 
 def _quick_links(heading: str, slugs, by_slug, key_prefix: str,
-                 marker: str = "", limit: int = 5) -> None:
+                 marker: str = "",
+                 limit: int = user_settings.SIDEBAR_FAVOURITES) -> None:
     """A short list of one-click jumps at the top of the sidebar.
 
     Favourites and recents are what stop a growing catalogue from making the
@@ -89,6 +90,14 @@ def main() -> None:
     prefs = user_settings.load()
     ui.inject_css(prefs)
 
+    # First run takes over the whole page. Returning here rather than drawing
+    # the app behind it keeps the sidebar, the palette trigger and the
+    # navigation widgets from being built at all, so nothing in setup can be
+    # knocked out of place by them.
+    if onboarding.needed(prefs):
+        onboarding.run(prefs)
+        return
+
     catalogue = all_calculators()
     by_slug = {calc.slug: (category, calc) for category, calc in catalogue}
 
@@ -116,7 +125,8 @@ def main() -> None:
             st.rerun()
 
         _quick_links("Favourites", prefs.get("favourites", []), by_slug,
-                     "fav", marker="★  ", limit=5)
+                     "fav", marker="★  ",
+                     limit=user_settings.SIDEBAR_FAVOURITES)
         _quick_links("Recent", [slug for slug in prefs.get("recents", [])
                                 if slug not in prefs.get("favourites", [])],
                      by_slug, "rec", limit=4)

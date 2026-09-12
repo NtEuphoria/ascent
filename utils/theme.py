@@ -487,6 +487,90 @@ _COMPONENTS = """
   to{opacity:1;transform:none;}}
 .a-brand svg{transform-box:fill-box;transform-origin:center;}
 
+/* ---- First-run setup ---- */
+/* One decision per screen, centred, with nothing else on the page. The
+   restraint is the effect: there is no competing content, so the entrance of
+   the few elements that exist carries all of the motion. */
+.st-key-onboarding{text-align:center;}
+
+.a-ob-mark{display:flex;justify-content:center;margin:0 0 var(--a-s5) 0;}
+.a-ob-mark svg{width:76px;height:76px;}
+.a-ob-mark svg path{fill:var(--a-mark);
+  animation:a-ob-mark-in var(--a-d-draw) var(--a-ease-expo) both;}
+.a-ob-mark-small svg{width:46px;height:46px;}
+/* The mark arrives from below and settles, rather than appearing at size.
+   Same gesture as the splash, so the launch and the welcome are continuous. */
+@keyframes a-ob-mark-in{
+  from{opacity:0;transform:translateY(14px) scale(.82);}
+  60%{opacity:1;}
+  to{opacity:1;transform:none;}}
+
+.a-ob-head{animation:a-ob-in var(--a-d-slower) var(--a-ease-expo) both;
+  animation-delay:var(--s,0ms);}
+.a-ob-title{font-size:2.05rem;font-weight:680;letter-spacing:-0.028em;
+  line-height:1.1;color:var(--a-ink);margin:0 0 var(--a-s3) 0;
+  text-wrap:balance;}
+.a-ob-body{font-size:var(--a-t-md);line-height:1.55;color:var(--a-ink-muted);
+  margin:0 auto var(--a-s5) auto;max-width:46ch;text-wrap:pretty;}
+
+/* Every element on a panel rises by the same amount on a stagger, which is
+   what makes a screen read as one object arriving rather than five. */
+@keyframes a-ob-in{from{opacity:0;transform:translateY(10px);}
+  to{opacity:1;transform:none;}}
+
+/* An option is a label and a description above its own button, so the button
+   stays a real button - focusable, keyboard-operable, announced - instead of
+   a styled div pretending to be one. */
+.a-ob-desc{font-size:var(--a-t-sm);color:var(--a-ink-faint);
+  margin:4px 0 var(--a-s3) 0;line-height:1.4;
+  animation:a-ob-in var(--a-d-slower) var(--a-ease-expo) both;
+  animation-delay:var(--s,0ms);}
+
+.st-key-onboarding [data-testid="stButton"] button{
+  justify-content:center;padding:11px var(--a-s4);font-weight:560;
+  min-height:42px;
+  border-radius:var(--a-r-md);
+  transition:background-color var(--a-d-base) var(--a-ease),
+             border-color var(--a-d-base) var(--a-ease),
+             color var(--a-d-base) var(--a-ease),
+             transform var(--a-d-fast) var(--a-ease-quart);}
+.st-key-onboarding [data-testid="stButton"] button:hover{
+  border-color:var(--a-accent-line);background:var(--a-accent-soft);}
+.st-key-onboarding [data-testid="stButton"] button:active{
+  transform:scale(.985);}
+
+/* Back is an undo, not an option: quiet, borderless, under the action it
+   reverses. */
+.st-key-obback_1 button,.st-key-obback_2 button,.st-key-obback_3 button,
+.st-key-obback_4 button{background:transparent!important;
+  border-color:transparent!important;color:var(--a-ink-faint)!important;
+  font-weight:450!important;margin-top:var(--a-s1);}
+.st-key-obback_1 button:hover,.st-key-obback_2 button:hover,
+.st-key-obback_3 button:hover,.st-key-obback_4 button:hover{
+  color:var(--a-ink)!important;background:transparent!important;}
+
+.a-ob-dots{display:flex;gap:7px;justify-content:center;
+  margin:var(--a-s5) 0 var(--a-s3) 0;}
+.a-ob-dot{width:6px;height:6px;border-radius:999px;background:var(--a-border-strong);
+  transition:background-color var(--a-d-slow) var(--a-ease-expo),
+             transform var(--a-d-slow) var(--a-ease-expo);}
+.a-ob-dot.on{background:var(--a-accent);transform:scale(1.18);}
+
+.a-ob-summary{display:flex;flex-direction:column;gap:0;
+  border:1px solid var(--a-border);border-radius:var(--a-r-md);
+  background:var(--a-raised);box-shadow:inset 0 1px 0 var(--a-edge);
+  margin:0 0 var(--a-s3) 0;overflow:hidden;}
+.a-ob-summary > div{display:flex;justify-content:space-between;
+  align-items:baseline;padding:10px var(--a-s4);
+  border-bottom:1px solid var(--a-border);
+  animation:a-ob-in var(--a-d-slower) var(--a-ease-expo) both;}
+.a-ob-summary > div:last-child{border-bottom:0;}
+.a-ob-summary > div:nth-child(2){animation-delay:70ms;}
+.a-ob-summary > div:nth-child(3){animation-delay:140ms;}
+.a-ob-summary span{font-size:var(--a-t-sm);color:var(--a-ink-muted);}
+.a-ob-summary b{font-family:var(--a-font-num);font-size:var(--a-t-sm);
+  font-weight:600;color:var(--a-ink);letter-spacing:-0.01em;}
+
 /* ---- Lists ---- */
 ul.a-tight{margin:2px 0 0 0;padding-left:var(--a-s4);
   font-size:var(--a-t-sm);color:var(--a-ink-muted);line-height:1.65;}
