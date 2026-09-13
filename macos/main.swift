@@ -19,6 +19,10 @@ let venvStreamlit = venvPath + "/bin/streamlit"
 let settingsPath = supportDir + "/settings.json"
 let logPath = supportDir + "/launcher.log"
 let serverLogPath = supportDir + "/server.log"
+/// A copy of the requirements the existing environment was built from. An
+/// update that adds a dependency has to be noticed somehow, and the presence
+/// of the streamlit binary cannot say anything about pyserial.
+let requirementsStampPath = supportDir + "/requirements.installed"
 
 func log(_ message: String) {
     let line = "[\(Date())] \(message)\n"
@@ -205,9 +209,51 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
     // MARK: First-run setup
 
+    /// The requirements file inside the bundle, as text.
+    var bundledRequirements: String? {
+        try? String(contentsOfFile: bundleAppPath + "/requirements.txt",
+                    encoding: .utf8)
+    }
+
+    /// Bring an existing environment up to the requirements this version ships.
+    ///
+    /// Without this, ensureRuntime returned as soon as it saw the streamlit
+    /// binary, so an update that ADDED a dependency never installed it: the
+    /// environment looked fine and the new feature was quietly missing. That
+    /// is exactly what happened when pyserial arrived - every existing
+    /// installation kept a venv with no serial support in it.
+    ///
+    /// A failure here is logged and otherwise ignored on purpose. The app
+    /// worked a moment ago and an unreachable package index is not a reason
+    /// to refuse to start; the pages that need the missing piece already say
+    /// so themselves.
+    func updateRuntimeIfNeeded() {
+        guard let wanted = bundledRequirements else { return }
+        let installed = try? String(contentsOfFile: requirementsStampPath,
+                                    encoding: .utf8)
+        if installed == wanted { return }
+
+        log("requirements changed since this environment was built - updating")
+        setStatus("Updating components…")
+        let code = runSync(venvPython,
+                           ["-m", "pip", "install", "--quiet", "-r",
+                            bundleAppPath + "/requirements.txt"],
+                           logTo: serverLogPath)
+        if code == 0 {
+            try? wanted.write(toFile: requirementsStampPath, atomically: true,
+                              encoding: .utf8)
+            log("environment updated")
+        } else {
+            log("could not update the environment; continuing with what is there")
+        }
+    }
+
     /// Create the Python environment if this is the first launch.
     func ensureRuntime() -> Bool {
-        if FileManager.default.isExecutableFile(atPath: venvStreamlit) { return true }
+        if FileManager.default.isExecutableFile(atPath: venvStreamlit) {
+            updateRuntimeIfNeeded()
+            return true
+        }
 
         log("first run - building the Python environment")
         setStatus("First run: setting up. This takes a minute…")
@@ -246,6 +292,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
             fail("Setup finished but the engine is missing.",
                  "See server.log in\n\(supportDir)")
             return false
+        }
+        if let wanted = bundledRequirements {
+            try? wanted.write(toFile: requirementsStampPath, atomically: true,
+                              encoding: .utf8)
         }
         log("environment ready")
         return true

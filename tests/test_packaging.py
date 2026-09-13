@@ -94,3 +94,30 @@ def test_the_installed_bundle_has_the_studios_hero():
         pytest.skip("no hero image in the source tree to bundle")
     assert (bundle / "assets" / "studios-hero.png").is_file(), \
         "the installed app is missing the Studios hero - rebuild with ./install.sh"
+
+
+def test_the_bootstrap_notices_a_changed_requirements_file():
+    """It used to return as soon as it saw the streamlit binary, so an update
+    that ADDED a dependency never installed it - the environment looked fine
+    and the new feature was quietly missing. That is exactly what happened
+    when pyserial arrived: every existing installation kept a venv with no
+    serial support in it, and the Live section said serial was unavailable."""
+    swift = (ROOT / "macos" / "main.swift").read_text(encoding="utf-8")
+    assert "requirementsStampPath" in swift
+    assert "updateRuntimeIfNeeded" in swift
+    # The stamp has to be written on the first-run path too, or every second
+    # launch would think the requirements had changed.
+    assert swift.count("requirementsStampPath") >= 3
+
+
+def test_every_requirement_is_pinned_or_bounded():
+    """The app builds its environment on first launch, so an unbounded range
+    lets a future release install something this interface has never seen."""
+    import re
+
+    text = (ROOT / "requirements.txt").read_text(encoding="utf-8")
+    for line in text.splitlines():
+        line = line.strip()
+        if not line or line.startswith("#"):
+            continue
+        assert re.search(r"[=<>]", line), f"{line!r} has no version bound"
