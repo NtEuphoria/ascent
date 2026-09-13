@@ -9,9 +9,7 @@ launch with ModuleNotFoundError. That happened with the studios package.
 from __future__ import annotations
 
 import ast
-import os
 import pathlib
-import sys
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 
@@ -75,3 +73,24 @@ def test_the_installed_bundle_has_every_package():
         assert (bundle / name).is_dir(), \
             f"the installed app is missing the {name} package - rebuild with " \
             f"./install.sh"
+
+
+def test_runtime_data_directories_are_bundled_too():
+    """assets/ is not a Python package, so the package search cannot find it.
+    The Studios card reads its hero from there and would fall back to the
+    drawn placeholder in the installed app while looking right in the dev
+    server - the same failure the studios package had, one directory over."""
+    build = (ROOT / "build.sh").read_text(encoding="utf-8")
+    assert "for DATA in assets" in build, "build.sh no longer copies assets/"
+
+
+def test_the_installed_bundle_has_the_studios_hero():
+    bundle = pathlib.Path("/Applications/ASCENT.app/Contents/Resources/app")
+    if not bundle.is_dir():
+        import pytest
+        pytest.skip("ASCENT is not installed on this machine")
+    if not (ROOT / "assets" / "studios-hero.png").is_file():
+        import pytest
+        pytest.skip("no hero image in the source tree to bundle")
+    assert (bundle / "assets" / "studios-hero.png").is_file(), \
+        "the installed app is missing the Studios hero - rebuild with ./install.sh"

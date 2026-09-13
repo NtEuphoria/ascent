@@ -17,7 +17,7 @@ from calculators import (aerodynamics, controls, drones, electrical, flight,
                          structures, units)
 from studios import (control_tuning, drivetrain, drone_powertrain,
                      lift_arm, structure, wing)
-from utils import navigate, onboarding, palette
+from utils import announce, navigate, onboarding, palette
 from utils import render as renderer
 from utils import settings as user_settings
 from utils import ui
@@ -218,6 +218,13 @@ def main() -> None:
                             remembered if remembered in MODES[name]
                             else MODES[name][0])
                         st.rerun()
+        def _open_studios():
+            st.session_state["nav_mode"] = "Studios"
+            st.session_state["nav_category"] = MODES["Studios"][0]
+            st.rerun()
+
+        announce.card(prefs, _open_studios)
+
         st.markdown(f'<div class="a-mode-name">{mode}'
                     f'<span>{MODE_BLURB[mode]}</span></div>',
                     unsafe_allow_html=True)

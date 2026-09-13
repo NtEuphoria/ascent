@@ -58,6 +58,9 @@ DEFAULTS: Dict[str, Any] = {
     # First run. False until the setup flow finishes, so a fresh install gets
     # the welcome and nobody else ever sees it again.
     "onboarded": False,
+    # The Studios introduction card. True once it has been read or dismissed;
+    # an announcement that reappears is an advertisement.
+    "studios_announced": False,
 }
 # Note: there is deliberately no setting to hide assumptions. Stating the
 # assumptions under every result is an accuracy requirement of this app, not a
@@ -73,7 +76,7 @@ _CHOICES = {
     "start_page": START_PAGE_OPTIONS,
 }
 _FLAGS = ("thousands_separator", "show_reference", "show_examples",
-          "onboarded")
+          "onboarded", "studios_announced")
 _SLUG_LISTS = ("favourites", "recents")
 
 
@@ -139,6 +142,7 @@ def reset() -> bool:
     current = load()
     fresh = dict(DEFAULTS)
     fresh["onboarded"] = current.get("onboarded", True)
+    fresh["studios_announced"] = current.get("studios_announced", True)
     fresh["favourites"] = current.get("favourites", [])
     return save(fresh)
 

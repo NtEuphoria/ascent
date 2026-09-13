@@ -304,3 +304,29 @@ def test_bars_animate_by_transform_not_width():
     """Animating width reflows the page on every frame, once per row."""
     block = theme._COMPONENTS.split("@keyframes a-bar-grow", 1)[1].split("}", 1)[0]
     assert "scaleX" in block and "width" not in block
+
+
+# ---------------------------------------------------------------------------
+# The stylesheet is served inside a style element
+# ---------------------------------------------------------------------------
+def test_the_stylesheet_contains_no_less_than_sign():
+    """A "less than" inside a style element ends it, as far as the HTML parser
+    is concerned. Writing an img tag inside a CSS comment silently deleted
+    everything after it: the app lost its entire stylesheet, rendered in
+    Streamlit's defaults, and showed no sidebar at all - with no error
+    anywhere, because the Python was perfectly valid.
+
+    A "greater than" is fine; it is the CSS child combinator.
+    """
+    for appearance in ("Follow system", "Light", "Dark"):
+        for accent in sorted(theme.ACCENTS):
+            css = theme.stylesheet(appearance, "Full", accent, "Comfortable")
+            assert "<" not in css, (
+                f"{appearance}/{accent}: the stylesheet contains '<', which "
+                f"terminates the style element and drops everything after it")
+
+
+def test_the_stylesheet_has_no_style_tags_of_its_own():
+    """inject() wraps it in one; a second opening tag inside would nest."""
+    css = theme.stylesheet("Dark", "Full", "Blue", "Comfortable")
+    assert "style>" not in css

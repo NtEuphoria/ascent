@@ -48,6 +48,13 @@ if [ -z "$PACKAGES" ]; then
 fi
 echo "    packages: $(echo $PACKAGES | tr '\n' ' ')"
 cp -R $PACKAGES "$APP/Contents/Resources/app/"
+# Non-package data the app reads at runtime. assets/ holds no __init__.py, so
+# the package search above cannot see it - and without it the Studios card
+# silently falls back to its drawn placeholder in the installed app while
+# looking correct in the dev server.
+for DATA in assets; do
+    [ -d "$DATA" ] && cp -R "$DATA" "$APP/Contents/Resources/app/"
+done
 cp -R .streamlit "$APP/Contents/Resources/app/"
 find "$APP/Contents/Resources/app" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 

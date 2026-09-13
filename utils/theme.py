@@ -631,6 +631,54 @@ _COMPONENTS = """
 .a-step i{display:block;font-style:normal;font-size:var(--a-t-sm);
   color:var(--a-ink-faint);margin-top:1px;}
 
+/* ---- Studios announcement ---- */
+/* Attached to the switcher above it by an arrow, so it reads as belonging to
+   the Studios button rather than as a notice that happens to be nearby. */
+.st-key-announce{position:relative;margin:0 0 var(--a-s4) 0;
+  animation:a-ann-in var(--a-d-slower) var(--a-ease-expo) both;
+  animation-delay:180ms;}
+.st-key-announce::before{content:"";position:absolute;top:-6px;left:50%;
+  width:11px;height:11px;background:var(--a-raised);
+  border-left:1px solid var(--a-border);border-top:1px solid var(--a-border);
+  transform:translateX(-50%) rotate(45deg);border-radius:2px 0 0 0;}
+@keyframes a-ann-in{from{opacity:0;transform:translateY(-6px) scale(.985);}
+  to{opacity:1;transform:none;}}
+
+.a-ann{border:1px solid var(--a-border);
+  border-radius:0 0 var(--a-r-md) var(--a-r-md);
+  background:var(--a-raised);overflow:hidden;margin-top:-4px;}
+/* The picture is an st.image element sitting above the text card rather than
+   inside it, so the rounding and the crop are applied here. */
+/* The image element and every wrapper Streamlit puts around it have to be
+   told to fill the column. Styling only the image itself left it 15px wide:
+   width 100% was resolving against a container that had collapsed to its own
+   content.
+
+   Note there are no angle brackets in this comment. A "less than" inside a
+   style element ends it as far as the HTML parser is concerned, so writing an
+   img tag here silently deleted the whole stylesheet from this point down -
+   the app rendered in Streamlit's defaults with no sidebar and no tokens. */
+.st-key-announce [data-testid="stElementContainer"],
+.st-key-announce [data-testid="stFullScreenFrame"],
+.st-key-announce [data-testid="stImage"],
+.st-key-announce [data-testid="stImageContainer"]{
+  margin:0;width:100%!important;display:block;}
+.st-key-announce [data-testid="stImage"] img{display:block;width:100%;
+  height:96px;object-fit:cover;
+  border:1px solid var(--a-border);border-bottom:0;
+  border-radius:var(--a-r-md) var(--a-r-md) 0 0;}
+.a-ann-body{padding:var(--a-s3);}
+/* A serif title, the one place in the app that uses one. It marks this as an
+   announcement rather than another piece of chrome. */
+.a-ann-title{font-family:Georgia,"Iowan Old Style","Times New Roman",serif;
+  font-size:var(--a-t-md);font-weight:500;color:var(--a-ink);
+  letter-spacing:-0.01em;line-height:1.15;margin-bottom:5px;}
+.a-ann-body p{font-size:var(--a-t-xs);line-height:1.5;
+  color:var(--a-ink-muted);margin:0;text-wrap:pretty;}
+.st-key-announce [data-testid="stButton"] button{
+  font-size:var(--a-t-xs);min-height:30px;padding:4px var(--a-s2);
+  margin-top:var(--a-s2);}
+
 /* ---- Project ---- */
 /* A bound input is a fact, not a control. It reads as a value the page has
    been given rather than one it is waiting for. */
