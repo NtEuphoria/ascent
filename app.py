@@ -15,7 +15,8 @@ from calculators import (aerodynamics, controls, drones, electrical, flight,
                          live, materials, mechanical, project,
                          propulsion, reference, robotics, rotational,
                          structures, units)
-from studios import lift_arm
+from studios import (control_tuning, drivetrain, drone_powertrain,
+                     lift_arm, structure, wing)
 from utils import navigate, onboarding, palette
 from utils import render as renderer
 from utils import settings as user_settings
@@ -33,7 +34,10 @@ CATEGORIES = {
     # First, because it is the thing the rest hangs off: a value defined here
     # is the same value on every page that links it.
     "Project": project.CALCULATORS,
-    "Studios": lift_arm.CALCULATORS,
+    # Ordered by how often someone reaches for them, not alphabetically.
+    "Studios": (drone_powertrain.CALCULATORS + drivetrain.CALCULATORS
+                + lift_arm.CALCULATORS + wing.CALCULATORS
+                + structure.CALCULATORS + control_tuning.CALCULATORS),
     "Aerodynamics": aerodynamics.CALCULATORS,
     "Flight performance": flight.CALCULATORS,
     "Drones": drones.CALCULATORS,

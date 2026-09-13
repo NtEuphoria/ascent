@@ -190,3 +190,70 @@ def test_the_studio_is_registered_in_its_own_section():
     assert "Studios" in app.MODES["Studios"]
     slugs = {c.slug for c in app.CATEGORIES["Studios"]}
     assert "studio.lift_arm" in slugs
+
+
+# --------------------------------------------------------------------------
+# Every studio, whichever they are
+# --------------------------------------------------------------------------
+def _studio_modules():
+    """Every module in studios/ that publishes pages."""
+    import importlib
+    import pkgutil
+
+    import studios
+
+    found = []
+    for info in pkgutil.iter_modules(studios.__path__):
+        module = importlib.import_module(f"studios.{info.name}")
+        if getattr(module, "CALCULATORS", None):
+            found.append(module)
+    return found
+
+
+def test_every_studio_is_registered_in_the_studios_section():
+    """A studio module nobody can reach is a studio that does not exist."""
+    import app
+
+    registered = {c.slug for c in app.CATEGORIES["Studios"]}
+    for module in _studio_modules():
+        for calc in module.CALCULATORS:
+            assert calc.slug in registered, \
+                f"{module.__name__} is not in the Studios section"
+
+
+def test_every_studio_uses_the_shared_shell():
+    """Five studios that each invented their own step heading would be five
+    products. The shell is what makes them one."""
+    import inspect
+
+    for module in _studio_modules():
+        source = inspect.getsource(module)
+        assert "shell." in source, f"{module.__name__} bypasses the shell"
+
+
+def test_every_studio_states_its_assumptions():
+    """A studio hands back a verdict, which is a stronger claim than a number.
+    It has to say what that verdict rests on."""
+    import inspect
+
+    for module in _studio_modules():
+        source = inspect.getsource(module)
+        assert "ui.assumptions" in source, \
+            f"{module.__name__} gives a verdict with no stated assumptions"
+
+
+def test_studio_slugs_are_unique():
+    slugs = [calc.slug for module in _studio_modules()
+             for calc in module.CALCULATORS]
+    assert len(slugs) == len(set(slugs))
+
+
+def test_every_studio_render_takes_the_standard_arguments():
+    """utils/render.py passes prefs and catalogue by inspecting the signature,
+    so a studio that names them differently silently gets neither."""
+    import inspect
+
+    for module in _studio_modules():
+        for calc in module.CALCULATORS:
+            parameters = inspect.signature(calc.render).parameters
+            assert "prefs" in parameters, f"{calc.slug} cannot receive prefs"
