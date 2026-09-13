@@ -33,7 +33,21 @@ rm -rf dist/arch
 
 echo "  - copying the calculation engine into the bundle"
 cp app.py requirements.txt "$APP/Contents/Resources/app/"
-cp -R calculators utils "$APP/Contents/Resources/app/"
+# Every top-level Python package, found rather than listed. The list used to
+# be hardcoded as "calculators utils", so adding the studios package built an
+# app that passed every test and then died on launch with
+# ModuleNotFoundError - the dev server runs from the source tree and never
+# notices what the bundle is missing.
+PACKAGES=$(find . -maxdepth 2 -name '__init__.py' \
+    -not -path './.venv/*' -not -path './dist/*' -not -path './build/*' \
+    -not -path './tests/*' -not -path './plugins/*' \
+    | xargs -n1 dirname | sed 's|^\./||' | sort -u)
+if [ -z "$PACKAGES" ]; then
+    echo "    ERROR: found no Python packages to bundle" >&2
+    exit 1
+fi
+echo "    packages: $(echo $PACKAGES | tr '\n' ' ')"
+cp -R $PACKAGES "$APP/Contents/Resources/app/"
 cp -R .streamlit "$APP/Contents/Resources/app/"
 find "$APP/Contents/Resources/app" -name '__pycache__' -type d -exec rm -rf {} + 2>/dev/null || true
 
