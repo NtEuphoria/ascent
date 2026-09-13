@@ -62,6 +62,10 @@ class Parameter:
     unit: str
     source: str = "Assumed"
     note: str = ""
+    uncertainty: float = 0.0
+    """The +/- on this value, in its own unit. Zero means "not stated",
+    which is different from "exact" - the pages say so rather than quietly
+    treating an unstated uncertainty as none."""
 
 
 @dataclass
@@ -80,6 +84,11 @@ class Verdict:
     unit: str = ""
     detail: str = ""
     unpinned: List[str] = field(default_factory=list)
+    sigma: float = 0.0
+    marginal: bool = False
+    """True when the uncertainty band crosses the target, so the verdict is
+    real but not established: the same design could fall the other side of the
+    line without anything about it changing."""
 
     @property
     def decided(self) -> bool:
@@ -116,6 +125,12 @@ def _coerce(raw: Any) -> Dict[str, Any]:
             value = float(entry["value"])
         except (KeyError, TypeError, ValueError):
             continue
+        try:
+            # Negative is meaningless and would flip a variance term's sign
+            # if it were ever used unsquared.
+            spread = abs(float(entry.get("uncertainty", 0.0) or 0.0))
+        except (TypeError, ValueError):
+            spread = 0.0
         out["parameters"][key] = asdict(Parameter(
             key=key,
             label=str(entry.get("label") or key),
@@ -124,6 +139,7 @@ def _coerce(raw: Any) -> Dict[str, Any]:
             source=(entry.get("source") if entry.get("source") in SOURCES
                     else "Assumed"),
             note=str(entry.get("note") or ""),
+            uncertainty=spread,
         ))
 
     for slot, param in (raw.get("bindings") or {}).items():
@@ -177,15 +193,16 @@ def parameters(project: Dict[str, Any]) -> List[Parameter]:
 
 
 def add_parameter(project: Dict[str, Any], label: str, value: float,
-                  unit: str, source: str = "Assumed",
-                  note: str = "") -> Parameter:
+                  unit: str, source: str = "Assumed", note: str = "",
+                  uncertainty: float = 0.0) -> Parameter:
     key = slugify(label)
     suffix = 2
     while key in project["parameters"] and \
             project["parameters"][key]["label"] != label:
         key, suffix = f"{slugify(label)}_{suffix}", suffix + 1
     param = Parameter(key=key, label=label, value=float(value), unit=unit,
-                      source=source, note=note)
+                      source=source, note=note,
+                      uncertainty=abs(float(uncertainty or 0.0)))
     project["parameters"][key] = asdict(param)
     return param
 
@@ -280,6 +297,19 @@ def inputs_for(project: Dict[str, Any], calc: Calculator
     return values, unpinned
 
 
+def uncertainties_for(project: Dict[str, Any], calc: Calculator
+                      ) -> Dict[str, float]:
+    """The +/- on each of a calculator's inputs, from the parameters bound to
+    them. An input with no bound parameter, or one whose parameter states no
+    uncertainty, contributes nothing."""
+    out: Dict[str, float] = {}
+    for spec_field in calc.inputs:
+        param = bound_value(project, calc.slug, spec_field.key)
+        if param is not None and param.uncertainty > 0:
+            out[spec_field.key] = param.uncertainty
+    return out
+
+
 def evaluate(project: Dict[str, Any], requirement: Requirement,
              catalogue: Dict[str, Any]) -> Verdict:
     """Decide a requirement, or explain honestly why it cannot be decided."""
@@ -322,7 +352,22 @@ def evaluate(project: Dict[str, Any], requirement: Requirement,
                    "your design yet.")
 
     passed = OPERATORS[requirement.op](value, requirement.target)
-    return Verdict(MET if passed else NOT_MET, value=value, unit=unit)
+
+    # If the answer's own uncertainty reaches across the target, the comparison
+    # is decided by a difference the inputs cannot actually resolve. That is
+    # not a failure, and it is not a clean pass either - it is a pass that
+    # should be labelled as one you cannot yet rely on.
+    from . import analysis
+
+    spread = analysis.uncertainty(calc, Inputs(values), value,
+                                  uncertainties_for(project, calc))
+    marginal = bool(spread.known
+                    and abs(value - requirement.target) < spread.sigma)
+    return Verdict(MET if passed else NOT_MET, value=value, unit=unit,
+                   sigma=spread.sigma, marginal=marginal,
+                   detail=(f"within ± {spread.sigma:.4g} {unit} of the target, "
+                           "so this is not established"
+                           if marginal else ""))
 
 
 def summary(project: Dict[str, Any], catalogue: Dict[str, Any]

@@ -254,3 +254,93 @@ def test_the_project_page_is_the_first_thing_in_the_catalogue():
     where someone should land rather than something to go hunting for."""
     import app
     assert list(app.CATEGORIES)[0] == "Project"
+
+
+# --------------------------------------------------------------------------
+# Uncertainty on a parameter, and what it does to a verdict
+# --------------------------------------------------------------------------
+def test_a_parameter_carries_its_uncertainty_through_a_save(empty):
+    store.add_parameter(empty, "Payload", 2.4, "kg", "Measured",
+                        "mean of 400 samples", uncertainty=0.05)
+    store.save(empty)
+    param = store.parameters(store.load())[0]
+    assert param.uncertainty == pytest.approx(0.05)
+
+
+def test_a_negative_uncertainty_is_taken_as_its_magnitude(empty):
+    """It is squared into a variance, so a sign would be meaningless - but a
+    negative stored value would still look wrong on the board."""
+    store.add_parameter(empty, "X", 1.0, "kg", uncertainty=-0.3)
+    assert store.parameters(empty)[0].uncertainty == pytest.approx(0.3)
+
+
+def test_a_malformed_uncertainty_falls_back_to_none_stated(empty):
+    empty["parameters"]["x"] = {"key": "x", "label": "X", "value": 1.0,
+                                "unit": "kg", "uncertainty": "quite a lot"}
+    assert store._coerce(empty)["parameters"]["x"]["uncertainty"] == 0.0
+
+
+def test_uncertainties_reach_the_inputs_they_are_bound_to(empty):
+    calc = _calc()
+    store.add_parameter(empty, "Load", 500.0, "N", uncertainty=25.0)
+    store.add_parameter(empty, "Length", 2.0, "m")      # no uncertainty stated
+    store.bind(empty, "t.beam", "load", "load")
+    store.bind(empty, "t.beam", "length", "length")
+    assert store.uncertainties_for(empty, calc) == {"load": 25.0}
+
+
+def test_an_unbound_input_contributes_no_uncertainty(empty):
+    calc = _calc()
+    store.add_parameter(empty, "Load", 500.0, "N", uncertainty=25.0)
+    assert store.uncertainties_for(empty, calc) == {}
+
+
+def _pinned(empty, load=500.0, length=2.0, load_sigma=0.0):
+    calc = _calc()
+    store.add_parameter(empty, "Load", load, "N", uncertainty=load_sigma)
+    store.add_parameter(empty, "Length", length, "m")
+    store.bind(empty, "t.beam", "load", "load")
+    store.bind(empty, "t.beam", "length", "length")
+    return calc
+
+
+def test_a_comfortable_pass_is_not_marked_marginal(empty):
+    calc = _pinned(empty, load_sigma=1.0)
+    requirement = store.add_requirement(empty, "Moment", "t.beam",
+                                        "at most", 5000.0)
+    verdict = store.evaluate(empty, requirement, _catalogue(calc))
+    assert verdict.status == store.MET and not verdict.marginal
+
+
+def test_a_pass_the_uncertainty_cannot_support_is_marked_not_established(empty):
+    """1000 against a target of 1010, with ±100 on the answer: it passes, but
+    the same design could fall the other side of the line without anything
+    about it changing."""
+    calc = _pinned(empty, load_sigma=50.0)      # x length 2 -> ±100 on moment
+    requirement = store.add_requirement(empty, "Moment", "t.beam",
+                                        "at most", 1010.0)
+    verdict = store.evaluate(empty, requirement, _catalogue(calc))
+    assert verdict.status == store.MET
+    assert verdict.marginal
+    assert verdict.sigma == pytest.approx(100.0, rel=1e-3)
+    assert "not established" in verdict.detail
+
+
+def test_a_near_miss_is_also_marked_not_established(empty):
+    """Marginal is about the size of the gap, not about which side it is."""
+    calc = _pinned(empty, load_sigma=50.0)
+    requirement = store.add_requirement(empty, "Moment", "t.beam",
+                                        "at most", 990.0)
+    verdict = store.evaluate(empty, requirement, _catalogue(calc))
+    assert verdict.status == store.NOT_MET and verdict.marginal
+
+
+def test_with_no_uncertainty_stated_nothing_is_marginal(empty):
+    """An unstated uncertainty is not zero uncertainty, so the page must not
+    start claiming results are established because nobody filled it in."""
+    calc = _pinned(empty, load_sigma=0.0)
+    requirement = store.add_requirement(empty, "Moment", "t.beam",
+                                        "at most", 1000.5)
+    verdict = store.evaluate(empty, requirement, _catalogue(calc))
+    assert verdict.status == store.MET
+    assert not verdict.marginal and verdict.sigma == 0.0

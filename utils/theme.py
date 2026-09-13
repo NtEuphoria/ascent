@@ -679,6 +679,22 @@ _COMPONENTS = """
   font-size:var(--a-t-xs);min-height:30px;padding:4px var(--a-s2);
   margin-top:var(--a-s2);}
 
+/* ---- Uncertainty band ---- */
+/* Deliberately not styled as another result card. The headline number is an
+   answer; this is a statement about how much of an answer it is. */
+.a-band{border:1px dashed var(--a-accent-line);border-radius:var(--a-r-md);
+  padding:var(--a-s4) var(--a-s5);margin:0 0 var(--a-s4) 0;
+  animation:a-rise var(--a-d-slow) var(--a-ease-expo) both;}
+.a-band-k{font-size:var(--a-t-sm);color:var(--a-ink-muted);}
+.a-band-v{font-family:var(--a-font-num);font-size:var(--a-t-xl);
+  font-weight:600;color:var(--a-ink);font-variant-numeric:tabular-nums;
+  letter-spacing:-0.02em;margin-top:2px;
+  display:flex;align-items:baseline;gap:var(--a-s2);flex-wrap:wrap;}
+.a-band-v span{font-size:var(--a-t-md);font-weight:550;
+  color:var(--a-accent-ink);letter-spacing:-0.01em;}
+.a-band-r{font-family:var(--a-font-num);font-size:var(--a-t-xs);
+  color:var(--a-ink-faint);margin-top:3px;font-variant-numeric:tabular-nums;}
+
 /* ---- Project ---- */
 /* A bound input is a fact, not a control. It reads as a value the page has
    been given rather than one it is waiting for. */

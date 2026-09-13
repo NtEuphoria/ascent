@@ -216,6 +216,52 @@ def _copy_block(calc: Calculator, values: Inputs, result: float,
 _LEVELS = {"info": st.info, "warning": st.warning, "danger": st.error}
 
 
+def _uncertainty_panel(calc: Calculator, values: Inputs, result: float,
+                       spread) -> None:
+    """Where the uncertainty on this answer comes from.
+
+    The contributions are the useful half. A band on its own says the answer
+    is soft; the breakdown says which single measurement is making it soft,
+    which is the difference between knowing you have a problem and knowing
+    what to do about it.
+    """
+    low, high = spread.band(result)
+    relative = spread.relative(result)
+    unit = calc.result.unit
+    st.markdown(
+        f'<div class="a-band">'
+        f'<div class="a-band-k">{calc.result.label}, with the uncertainty on '
+        f'its inputs carried through</div>'
+        f'<div class="a-band-v">{format_number(result, 4)}'
+        f'<span>± {format_number(spread.sigma, 3)} {unit}</span></div>'
+        f'<div class="a-band-r">between {format_number(low, 4)} and '
+        f'{format_number(high, 4)} {unit}'
+        + (f'  ·  ± {relative * 100:.1f}%' if relative is not None else "")
+        + '</div></div>', unsafe_allow_html=True)
+
+    rows = ["| Input | Its ± | Contributes | Share of the doubt |",
+            "| --- | --- | --- | --- |"]
+    for item in spread.contributions:
+        rows.append(
+            f"| {item.label} | ± {format_number(item.input_sigma, 3)} "
+            f"{item.unit} | ± {format_number(item.result_sigma, 3)} {unit} | "
+            f"{item.share * 100:.0f}% |")
+    st.markdown("\n".join(rows))
+
+    worst = spread.contributions[0]
+    st.caption(
+        f"{worst.label} accounts for {worst.share * 100:.0f}% of it. "
+        "Narrowing that one input is worth more than narrowing all the others "
+        "put together." if worst.share > 0.5 else
+        f"The doubt is spread across {len(spread.contributions)} inputs, so no "
+        "single measurement will tighten it much on its own.")
+    st.caption("Terms are added in quadrature, not linearly, because "
+               "independent errors partly cancel rather than all going the "
+               "same way at once. That assumes the inputs are independent of "
+               "each other and that the equation is near enough to straight "
+               "across the width of each ±.")
+
+
 def _influence_table(calc: Calculator, values: Inputs, result: float) -> None:
     """Which input actually drives this number, measured rather than asserted.
 
@@ -295,7 +341,7 @@ def _related(calc: Calculator, catalogue) -> None:
 
 
 def _analysis(calc: Calculator, values: Inputs, result, catalogue,
-              prefs: dict) -> None:
+              prefs: dict, project: dict) -> None:
     """Graphs, influence, reference data and links, in one tabbed block.
 
     Tabs rather than a stack because these are alternatives, not a sequence:
@@ -307,6 +353,16 @@ def _analysis(calc: Calculator, values: Inputs, result, catalogue,
     for index, sweep in enumerate(calc.graphs):
         labels.append(sweep.title.split(" (")[0][:34])
         drawers.append(("graph", (sweep, index)))
+    spread = None
+    if calc.compute is not None and result is not None:
+        sigmas = project_store.uncertainties_for(project, calc)
+        if sigmas:
+            spread = analysis.uncertainty(calc, values, result, sigmas)
+            if not spread.known:
+                spread = None
+    if spread is not None:
+        labels.append("How sure is this")
+        drawers.append(("uncertainty", spread))
     if calc.sensitivity and calc.compute is not None:
         labels.append("What drives this")
         drawers.append(("influence", None))
@@ -328,6 +384,8 @@ def _analysis(calc: Calculator, values: Inputs, result, catalogue,
                 else:
                     _draw_graph(calc, values, result, payload[0], payload[1],
                                 prefs.get("appearance", "Follow system"))
+            elif kind == "uncertainty":
+                _uncertainty_panel(calc, values, result, payload)
             elif kind == "influence":
                 if result is None:
                     st.caption("Fix the inputs above to measure this.")
@@ -502,7 +560,7 @@ def _render_body(calc: Calculator, prefs: dict, catalogue: dict) -> None:
         _copy_block(calc, values, result, secondary, significant)
 
     ui.assumptions(calc.assumptions)
-    _analysis(calc, values, result, catalogue, prefs)
+    _analysis(calc, values, result, catalogue, prefs, project)
 
     if prefs.get("show_reference", True):
         ui.reference(calc.variables, calc.example,

@@ -359,15 +359,21 @@ def _measure_into_project(samples, channels) -> None:
                     st.warning("Pick a channel with data and give it a name.")
                 else:
                     project = store.load()
+                    # The spread goes in as the parameter's uncertainty, not
+                    # just as a note: a measurement already knows how much it
+                    # moved, so every calculator linked to it can carry that
+                    # through to its answer without anyone retyping it.
                     store.add_parameter(
                         project, label.strip(), stats.mean, unit.strip(),
                         "Measured",
-                        f"mean of {stats.count} samples, "
-                        f"1σ ± {format_number(stats.sd, 3)}")
+                        f"mean of {stats.count} samples",
+                        uncertainty=stats.sd)
                     store.save(project)
-                    st.success(f"Added {label.strip()} = "
-                               f"{format_number(stats.mean, 5)}. Open Project "
-                               f"to link it.")
+                    st.success(
+                        f"Added {label.strip()} = "
+                        f"{format_number(stats.mean, 5)} ± "
+                        f"{format_number(stats.sd, 3)}. Link it on a "
+                        f"calculator and the answer carries the ± too.")
 
 
 def _export(source) -> None:

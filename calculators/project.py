@@ -47,9 +47,11 @@ def _parameters(project, catalogue) -> None:
                     f'{" · " + param.note if param.note else ""}</div>',
                     unsafe_allow_html=True)
             with middle:
+                spread = (f' ± {format_number(param.uncertainty, 3)}'
+                          if param.uncertainty > 0 else "")
                 st.markdown(
                     f'<div class="a-param-v">{format_number(param.value, 6)}'
-                    f'<span>{param.unit}</span></div>'
+                    f'{spread}<span>{param.unit}</span></div>'
                     f'<div class="a-param-src">'
                     f'{_usage_text(uses, catalogue)}</div>',
                     unsafe_allow_html=True)
@@ -80,13 +82,20 @@ def _parameters(project, catalogue) -> None:
                 help="Kept with the value, because a measured number and a "
                      "guessed one are not the same input even when they are "
                      "the same digits.")
+            spread = st.number_input(
+                "Uncertainty ±", value=0.0, min_value=0.0, format="%.6g",
+                help="In the same unit. Leave at zero if you have not "
+                     "established one - that is different from the value "
+                     "being exact, and the pages say so. A measurement sent "
+                     "from Live data fills this in from its own spread.")
             note = st.text_input("Note", placeholder="optional")
             if st.form_submit_button("Add", type="primary"):
                 if not label.strip():
                     st.warning("Give it a name.")
                 else:
                     store.add_parameter(project, label.strip(), value,
-                                        unit.strip(), source, note.strip())
+                                        unit.strip(), source, note.strip(),
+                                        uncertainty=spread)
                     store.save(project)
                     st.rerun()
 
@@ -123,6 +132,9 @@ def _requirements(project, catalogue) -> None:
     for requirement in reqs:
         verdict = store.evaluate(project, requirement, catalogue)
         style, text = _BADGE[verdict.status]
+        if verdict.marginal:
+            # Still a pass or a fail, but one the inputs cannot resolve.
+            style, text = "a-warn", text + ", not established"
         entry = catalogue.get(requirement.slug)
         page = (entry[1].name if isinstance(entry, tuple) else "?") if entry \
             else "missing calculator"
@@ -224,6 +236,13 @@ def render(prefs=None, catalogue=None) -> None:
         "Parameters are matched to inputs by unit text, so the unit must be "
         "written exactly as the calculator writes it. No conversion is "
         "performed.",
+        "A requirement marked 'not established' is decided by a difference "
+        "smaller than the uncertainty on the answer. It is not a failure, and "
+        "it is not a pass you can rely on - the same design could fall the "
+        "other side of the line without anything about it changing.",
+        "An uncertainty of zero means none has been stated, not that the "
+        "value is exact. Nothing here can tell the difference, so a result "
+        "with no ± is not the same as a result known precisely.",
         "The source label on a parameter is recorded, not verified. Marking a "
         "guess as 'measured' makes it look like evidence without making it "
         "any more true.",

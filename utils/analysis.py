@@ -22,7 +22,7 @@ out of the arithmetic.
 from __future__ import annotations
 
 import math
-from typing import Any, Dict, List, NamedTuple, Optional
+from typing import Any, Dict, List, NamedTuple, Optional, Tuple
 
 from .spec import Calculator, Inputs
 from .validation import ValidationError
@@ -62,13 +62,13 @@ def _evaluate(calc: Calculator, values: Dict[str, Any], key: str,
     return float(out)
 
 
-def elasticity(calc: Calculator, values: Inputs, key: str,
+def derivative(calc: Calculator, values: Inputs, key: str,
                result: float) -> Optional[float]:
-    """Central-difference elasticity of the result with respect to one input.
+    """df/dx for one input, by central difference.
 
-    A central difference is used rather than a one-sided one because many of
-    these equations are curved, and a forward difference on a parabola carries
-    a first-order error that would show velocity in the lift equation as 2.01
+    A central difference rather than a one-sided one because many of these
+    equations are curved, and a forward difference on a parabola carries a
+    first-order error that would show velocity in the lift equation as 2.01
     rather than 2.00. The step is relative so it suits both a wingspan of 10 m
     and a viscosity of 1.8e-5.
     """
@@ -77,8 +77,6 @@ def elasticity(calc: Calculator, values: Inputs, key: str,
     if not isinstance(x, (int, float)) or isinstance(x, bool):
         return None
     x = float(x)
-    if abs(result) < _NEAR_ZERO:
-        return None
 
     step = 1e-4 * abs(x) if x != 0 else 1e-6
     up = _evaluate(calc, base, key, x + step)
@@ -89,13 +87,25 @@ def elasticity(calc: Calculator, values: Inputs, key: str,
         one_sided = up if up is not None else down
         if one_sided is None:
             return None
-        derivative = (one_sided - result) / (step if up is not None else -step)
+        slope = (one_sided - result) / (step if up is not None else -step)
     else:
-        derivative = (up - down) / (2.0 * step)
+        slope = (up - down) / (2.0 * step)
+    return slope if math.isfinite(slope) else None
 
-    if x == 0:
-        return None          # x/f is zero: elasticity says nothing at the origin
-    value = derivative * x / result
+
+def elasticity(calc: Calculator, values: Inputs, key: str,
+               result: float) -> Optional[float]:
+    """Percentage change in the result per one percent change in an input."""
+    x = values.as_dict().get(key)
+    if not isinstance(x, (int, float)) or isinstance(x, bool):
+        return None
+    x = float(x)
+    if abs(result) < _NEAR_ZERO or x == 0:
+        return None          # x/f says nothing at the origin
+    slope = derivative(calc, values, key, result)
+    if slope is None:
+        return None
+    value = slope * x / result
     return value if math.isfinite(value) else None
 
 
@@ -147,3 +157,83 @@ def describe(influence: Influence) -> str:
             break
     return (f"A 1% increase here {direction} the result by "
             f"{magnitude:.2f}%.{shape}")
+
+
+# ---------------------------------------------------------------------------
+# Uncertainty
+# ---------------------------------------------------------------------------
+class Contribution(NamedTuple):
+    """How much one input's uncertainty contributes to the result's."""
+
+    key: str
+    label: str
+    unit: str
+    input_sigma: float          # the +/- on the input, in its own unit
+    result_sigma: float         # what that alone would put on the result
+    share: float                # fraction of the total variance, 0 to 1
+
+
+class Uncertainty(NamedTuple):
+    sigma: float                            # combined, on the result
+    contributions: List[Contribution]       # largest share first
+
+    @property
+    def known(self) -> bool:
+        return self.sigma > 0 and bool(self.contributions)
+
+    def band(self, result: float) -> Tuple[float, float]:
+        return result - self.sigma, result + self.sigma
+
+    def relative(self, result: float) -> Optional[float]:
+        """The +/- as a fraction of the result, or None at zero."""
+        return self.sigma / abs(result) if abs(result) > _NEAR_ZERO else None
+
+
+def uncertainty(calc: Calculator, values: Inputs, result: float,
+                sigmas: Dict[str, float]) -> Uncertainty:
+    """Propagate input uncertainties through to the result.
+
+    First-order propagation, the standard approach:
+
+        sigma_f^2 = sum over i of (df/dx_i * sigma_i)^2
+
+    Each input's uncertainty is scaled by how hard that input drives the
+    result, and the scaled terms are added in quadrature rather than linearly -
+    which is why four inputs each contributing 1% give 2% rather than 4%.
+    Independent errors partly cancel; they do not all go the same way at once.
+
+    Two assumptions ride on that formula and both are stated on the page:
+    the inputs must be independent of each other, and the function must be
+    near enough to linear across the width of each uncertainty. A large
+    uncertainty on a sharply curved term breaks the second, and the answer
+    comes out too small.
+
+    The per-input contributions are the useful part. They say which
+    measurement is actually costing you the confidence, which turns "my answer
+    is +/- 9%" into "go and measure this one thing".
+    """
+    terms: List[Contribution] = []
+    variance = 0.0
+    for field in calc.inputs:
+        sigma_in = float(sigmas.get(field.key, 0.0) or 0.0)
+        if sigma_in <= 0 or field.kind not in _NUMERIC_KINDS:
+            continue
+        slope = derivative(calc, values, field.key, result)
+        if slope is None:
+            continue
+        term = abs(slope) * sigma_in
+        if not math.isfinite(term) or term <= 0:
+            continue
+        variance += term * term
+        terms.append(Contribution(field.key, field.label, field.unit,
+                                  sigma_in, term, 0.0))
+
+    if variance <= 0:
+        return Uncertainty(0.0, [])
+
+    total = math.sqrt(variance)
+    # Share of the VARIANCE, not of the standard deviation: variances are what
+    # add, so these are the numbers that sum to one.
+    ranked = [c._replace(share=(c.result_sigma ** 2) / variance) for c in terms]
+    ranked.sort(key=lambda c: -c.share)
+    return Uncertainty(total, ranked)
