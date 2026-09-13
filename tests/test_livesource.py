@@ -8,6 +8,7 @@ how the port is opened or how partial lines are handled would actually fail.
 """
 from __future__ import annotations
 
+import math
 import os
 import time
 
@@ -173,3 +174,118 @@ def test_csv_of_nothing_is_still_valid_csv():
 def test_available_ports_never_raises():
     for device, description in livesource.available_ports():
         assert isinstance(device, str) and isinstance(description, str)
+
+
+# --------------------------------------------------------------------------
+# Recorded logs
+# --------------------------------------------------------------------------
+def test_a_recorded_log_becomes_a_source_like_any_other():
+    """The section used to work only while hardware was attached. A file goes
+    through the same parser, so every readout and chart works unchanged."""
+    log = ("elapsed_s,voltage,current\n"
+           "0.0,16.8,10.0\n0.5,16.6,12.0\n1.0,16.4,11.0\n")
+    source = livesource.FileSource("bench.csv", log)
+    assert source.running
+    assert source.channels() == ["voltage", "current"]
+    assert len(source.history()) == 3
+
+
+def test_the_time_column_sets_the_spacing_and_is_not_plotted():
+    """Otherwise a log recorded at 200 Hz and one at 2 Hz would look the same,
+    and the clock would appear as a channel climbing steadily forever."""
+    log = "elapsed_s,v\n0.0,1.0\n2.0,2.0\n"
+    source = livesource.FileSource("x.csv", log)
+    assert "elapsed_s" not in source.channels()
+    assert source.duration() == pytest.approx(2.0, abs=1e-3)
+    assert source.time_column == "elapsed_s"
+
+
+def test_millis_are_read_as_milliseconds():
+    """A ten-second log would otherwise play back as though it lasted three
+    hours."""
+    log = "millis,v\n0,1.0\n10000,2.0\n"
+    source = livesource.FileSource("x.csv", log)
+    assert source.duration() == pytest.approx(10.0, abs=1e-3)
+
+
+def test_without_a_time_column_the_assumed_rate_is_used():
+    log = "v\n1.0\n2.0\n3.0\n"
+    source = livesource.FileSource("x.csv", log, assumed_hz=10.0)
+    assert source.time_column is None
+    assert source.duration() == pytest.approx(0.2, abs=1e-3)
+
+
+def test_a_file_of_prose_yields_nothing_rather_than_guesses():
+    source = livesource.FileSource("notes.txt", "hello\nthis is not data\n")
+    assert source.history() == []
+    assert not source.running
+    assert source.skipped == 2
+
+
+def test_boot_banners_in_a_captured_log_are_skipped():
+    log = ("ESP-ROM:esp32s3\nrst:0x1 (POWERON)\n"
+           "voltage,current\n16.8,10.0\n16.6,12.0\n")
+    source = livesource.FileSource("capture.log", log)
+    assert source.channels() == ["voltage", "current"]
+    assert len(source.history()) == 2
+
+
+def test_a_log_exported_by_this_app_reads_back_identically():
+    """The round trip that matters: record a run, export it, open it again."""
+    original = [(1000.0, {"a": 1.0, "b": 2.0}), (1000.5, {"a": 1.5, "b": 2.5})]
+    text = livesource.to_csv(original)
+    source = livesource.FileSource("roundtrip.csv", text)
+    assert source.channels() == ["a", "b"]
+    assert [values for _, values in source.history()] == \
+        [{"a": 1.0, "b": 2.0}, {"a": 1.5, "b": 2.5}]
+    assert source.duration() == pytest.approx(0.5, abs=1e-3)
+
+
+def test_a_file_source_needs_no_thread_and_no_stopping():
+    source = livesource.FileSource("x.csv", "v\n1.0\n2.0\n")
+    source.start()
+    source.stop()
+    assert source.running          # still holds its data after being stopped
+
+
+# --------------------------------------------------------------------------
+# Statistics
+# --------------------------------------------------------------------------
+def test_the_mean_and_spread_match_the_standard_library():
+    import statistics as py
+
+    values = [16.8, 16.6, 16.4, 16.2]
+    samples = [(float(i), {"v": value}) for i, value in enumerate(values)]
+    stats = livesource.statistics(samples, "v")
+    assert stats.count == 4
+    assert stats.mean == pytest.approx(py.mean(values))
+    assert stats.sd == pytest.approx(py.stdev(values))
+    assert (stats.low, stats.high) == (16.2, 16.8)
+
+
+def test_the_spread_uses_n_minus_one():
+    """These are samples of a signal, not the whole of it."""
+    samples = [(0.0, {"v": 1.0}), (1.0, {"v": 3.0})]
+    stats = livesource.statistics(samples, "v")
+    assert stats.sd == pytest.approx(math.sqrt(2.0))     # not sqrt(1.0)
+
+
+def test_a_single_sample_has_no_spread_rather_than_an_error():
+    stats = livesource.statistics([(0.0, {"v": 5.0})], "v")
+    assert stats.count == 1 and stats.sd == 0.0 and stats.mean == 5.0
+
+
+def test_a_steady_channel_has_zero_spread():
+    samples = [(float(i), {"v": 2.5}) for i in range(20)]
+    assert livesource.statistics(samples, "v").sd == pytest.approx(0.0)
+
+
+def test_statistics_of_an_absent_channel_are_none_not_zero():
+    """Zero would read as a measurement of nothing rather than no measurement."""
+    assert livesource.statistics([(0.0, {"a": 1.0})], "b") is None
+
+
+def test_statistics_ignore_samples_that_lack_the_channel():
+    samples = [(0.0, {"a": 1.0}), (1.0, {"b": 9.0}), (2.0, {"a": 3.0})]
+    stats = livesource.statistics(samples, "a")
+    assert stats.count == 2 and stats.mean == pytest.approx(2.0)

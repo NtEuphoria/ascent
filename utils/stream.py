@@ -79,8 +79,12 @@ def parse_json(line: str) -> Optional[Dict[str, float]]:
 
 def parse_pairs(line: str) -> Optional[Dict[str, float]]:
     """pitch=1.4, roll=-0.2   or   pitch: 1.4 roll: -0.2"""
+    # The number must not run straight into a letter. Without that, an ESP32
+    # boot banner - "rst:0x1 (POWERON)" - parsed as a channel called rst with
+    # a value of 0, and a reset message became a permanent line on the chart.
     found = re.findall(r"([A-Za-z_][A-Za-z0-9_.\-]*)\s*[=:]\s*"
-                       r"(-?\d+\.?\d*(?:[eE][-+]?\d+)?)", line)
+                       r"(-?\d+\.?\d*(?:[eE][-+]?\d+)?)(?![A-Za-z0-9_.])",
+                       line)
     if not found:
         return None
     out = {}

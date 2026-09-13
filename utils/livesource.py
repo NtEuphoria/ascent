@@ -20,7 +20,7 @@ import math
 import threading
 import time
 from collections import deque
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, NamedTuple, Optional, Sequence, Tuple
 
 from .stream import StreamParser
 
@@ -187,6 +187,124 @@ class SerialSource(Source):
             values = self.parser.feed(line)
             if values:
                 self._record(values)
+
+
+class FileSource(Source):
+    """A log that was recorded earlier, read through the same parser.
+
+    The single largest limitation of this section was that it only worked
+    while hardware was attached: you could watch a test and then had nothing
+    to look at afterwards. A file is a Source like any other, so every
+    readout, statistic and chart works on it unchanged.
+
+    Timestamps come from a time column when the file has one - the CSV this
+    app exports does - so a log recorded at 200 Hz and one recorded at 2 Hz
+    do not both play back as though they were the same. Without one the
+    samples are spaced evenly at `assumed_hz`, and the page says so.
+    """
+
+    kind = "file"
+
+    TIME_COLUMNS = ("elapsed_s", "time_s", "time", "t", "timestamp", "millis")
+
+    def __init__(self, name: str, text: str, assumed_hz: float = 50.0) -> None:
+        super().__init__(f"{name} (recorded)")
+        self.name = name
+        self.assumed_hz = max(float(assumed_hz), 1e-3)
+        self.time_column: Optional[str] = None
+        self.skipped = 0
+        self._load(text)
+
+    def _load(self, text: str) -> None:
+        rows: List[Dict[str, float]] = []
+        for line in text.splitlines():
+            values = self.parser.feed(line)
+            if values:
+                rows.append(values)
+            elif line.strip():
+                self.skipped += 1
+        if not rows:
+            return
+
+        self.time_column = next(
+            (name for name in self.TIME_COLUMNS if name in rows[0]), None)
+        start = time.time()
+        for index, values in enumerate(rows):
+            if self.time_column is not None:
+                offset = values[self.time_column]
+                # A millis column is in milliseconds; everything else in
+                # seconds. Guessing from the name is crude but it is what the
+                # column is called, and the alternative is silently playing a
+                # ten-second log back as though it lasted three hours.
+                if self.time_column == "millis":
+                    offset /= 1000.0
+            else:
+                offset = index / self.assumed_hz
+            stamp = start + float(offset)
+            # Every known clock column is dropped, not only the one chosen
+            # for spacing: the CSV this app exports carries both time_s and
+            # elapsed_s, and the unused one would otherwise appear as a
+            # channel climbing steadily forever.
+            plotted = {k: v for k, v in values.items()
+                       if k not in self.TIME_COLUMNS}
+            if plotted:
+                self._history.append((stamp, plotted))
+
+    def start(self) -> None:
+        """Nothing to start: the file was read when it was opened."""
+        self.started_at = self.started_at or time.time()
+
+    def stop(self) -> None:
+        pass
+
+    @property
+    def running(self) -> bool:
+        return bool(self._history)
+
+    def duration(self) -> float:
+        samples = self.history()
+        return samples[-1][0] - samples[0][0] if len(samples) > 1 else 0.0
+
+
+# ---------------------------------------------------------------------------
+# Statistics
+# ---------------------------------------------------------------------------
+class Stats(NamedTuple):
+    """What a channel did over a window, rather than what it is right now."""
+
+    count: int
+    mean: float
+    sd: float
+    low: float
+    high: float
+
+    @property
+    def span(self) -> float:
+        return self.high - self.low
+
+
+def statistics(samples: Sequence[Sample], channel: str) -> Optional[Stats]:
+    """Mean, spread and extremes for one channel.
+
+    A single live number is a glimpse: it is whatever the channel happened to
+    be at the instant the page drew. A mean over a window with its standard
+    deviation beside it is a measurement, and is the difference between a
+    figure worth pinning into a design and one worth nothing.
+
+    The spread is the sample standard deviation, with n-1 in the denominator,
+    because these are samples of a signal rather than the whole of it.
+    """
+    series = [values[channel] for _, values in samples if channel in values]
+    if not series:
+        return None
+    count = len(series)
+    mean = sum(series) / count
+    if count > 1:
+        variance = sum((value - mean) ** 2 for value in series) / (count - 1)
+        sd = math.sqrt(variance)
+    else:
+        sd = 0.0
+    return Stats(count, mean, sd, min(series), max(series))
 
 
 # ---------------------------------------------------------------------------

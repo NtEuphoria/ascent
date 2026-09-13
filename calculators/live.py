@@ -19,7 +19,9 @@ import time
 
 import streamlit as st
 
-from utils import charts, livesource, ui
+from utils import charts, livesource
+from utils import project as store
+from utils import ui
 from utils.formatting import format_number
 from utils.spec import Calculator, Inputs
 
@@ -102,6 +104,40 @@ def _connection_panel() -> None:
 
     if source is not None and source.error:
         st.error(f"Could not read that port: {source.error}")
+
+    _open_recording()
+
+
+def _open_recording() -> None:
+    """Open a log recorded earlier.
+
+    Until this existed the page only worked while hardware was attached: you
+    could watch a test and then had nothing to look at afterwards. A file goes
+    through the same parser as the serial port, so every readout, statistic
+    and chart works on it unchanged.
+    """
+    with st.expander("Open a recorded log"):
+        st.markdown(
+            '<div class="a-note">A CSV or plain log, in any of the formats '
+            'this page already reads. A time column - <code>elapsed_s</code>, '
+            '<code>time_s</code> or <code>millis</code> - is used for spacing '
+            'if there is one; the file this page exports has one.</div>',
+            unsafe_allow_html=True)
+        upload = st.file_uploader("Log file", type=["csv", "txt", "log", "tsv"],
+                                  key="live_upload", label_visibility="collapsed")
+        assumed = st.number_input(
+            "Sample rate to assume if the file has no time column [Hz]",
+            value=50.0, min_value=0.1, step=10.0, key="live_assumed")
+        if upload is not None and st.button("Open it", key="live_openfile",
+                                            type="primary"):
+            text = upload.getvalue().decode("utf-8", errors="replace")
+            source = livesource.FileSource(upload.name, text, assumed)
+            if not source.history():
+                st.error("Nothing in that file parsed as data. It needs "
+                         "numbers in one of the formats listed above.")
+            else:
+                livesource.connect(source)
+                st.rerun()
 
 
 def _sparkline(series, width: int = 108, height: int = 26) -> str:
@@ -258,7 +294,80 @@ def _live_view(prefs: dict) -> None:
                 if st.session_state.get(f"live_ch_{name}", True)]
     charts.stream_chart(samples, selected,
                         prefs.get("appearance", "Follow system"))
+
+    st.markdown('<div class="a-label">Over this window</div>',
+                unsafe_allow_html=True)
+    _statistics(source, seconds)
     _export(source)
+
+
+def _statistics(source, seconds) -> None:
+    """What each channel did over the window, rather than what it is now.
+
+    A single live number is whatever the channel happened to be at the instant
+    the page drew. A mean with its spread beside it is a measurement, and that
+    is the difference between a figure worth pinning into a design and one
+    worth nothing.
+    """
+    samples = source.history()
+    if seconds is not None:
+        cutoff = time.time() - seconds
+        samples = [pair for pair in samples if pair[0] >= cutoff]
+    channels = source.channels()
+    if not samples or not channels:
+        return
+
+    rows = ["| Channel | n | Mean | Spread (1σ) | Lowest | Highest |",
+            "| --- | --- | --- | --- | --- | --- |"]
+    for name in channels:
+        stats = livesource.statistics(samples, name)
+        if stats is None:
+            continue
+        rows.append(
+            f"| {name} | {stats.count} | {format_number(stats.mean, 5)} | "
+            f"± {format_number(stats.sd, 3)} | {format_number(stats.low, 5)} | "
+            f"{format_number(stats.high, 5)} |")
+    st.markdown("\n".join(rows))
+    st.caption("Sample standard deviation, over the window shown above. It is "
+               "the spread of the signal, not the accuracy of the instrument "
+               "that measured it - a steady reading from a badly calibrated "
+               "sensor has a small spread and is still wrong.")
+
+    _measure_into_project(samples, channels)
+
+
+def _measure_into_project(samples, channels) -> None:
+    """Turn a channel's mean into a project parameter.
+
+    This is the point of the whole section. A number measured on the bench
+    becomes the number every linked calculator uses, carrying its provenance -
+    how many samples it came from and how much it moved - rather than being
+    retyped from memory as an assumption.
+    """
+    with st.popover("Send a measurement to the project"):
+        with st.form("live_to_project", border=False):
+            channel = st.selectbox("Channel", channels)
+            label = st.text_input("Call it", value=channel.replace("_", " ")
+                                  .capitalize())
+            unit = st.text_input("Unit", placeholder="V",
+                                 help="Must match the unit on the calculator "
+                                      "input you want to link it to, exactly "
+                                      "as written there.")
+            if st.form_submit_button("Add to project", type="primary"):
+                stats = livesource.statistics(samples, channel)
+                if stats is None or not label.strip():
+                    st.warning("Pick a channel with data and give it a name.")
+                else:
+                    project = store.load()
+                    store.add_parameter(
+                        project, label.strip(), stats.mean, unit.strip(),
+                        "Measured",
+                        f"mean of {stats.count} samples, "
+                        f"1σ ± {format_number(stats.sd, 3)}")
+                    store.save(project)
+                    st.success(f"Added {label.strip()} = "
+                               f"{format_number(stats.mean, 5)}. Open Project "
+                               f"to link it.")
 
 
 def _export(source) -> None:
@@ -335,6 +444,18 @@ def render_monitor(prefs=None) -> None:
         "before they scroll off.",
         "The simulated signal is synthetic. It is there to demonstrate the "
         "page and is never a measurement of anything.",
+        "A recorded log is spaced by its own time column when it has one - "
+        "elapsed_s, time_s or millis. Without one the samples are spread "
+        "evenly at the rate you assume, so the shape is right but the time "
+        "axis is only as good as that guess.",
+        "The spread shown for each channel is the sample standard deviation "
+        "of the signal over the window. It says how much the reading moved, "
+        "not how accurate it was: a steady reading from a badly calibrated "
+        "sensor has a small spread and is still wrong.",
+        "A measurement sent to the project carries the mean over the window "
+        "and how many samples it came from. Choosing a window where the "
+        "signal was doing something other than what you meant to measure is "
+        "not something this page can detect.",
     ])
 
     ui.reference(
