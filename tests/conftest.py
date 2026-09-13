@@ -12,6 +12,7 @@ from __future__ import annotations
 import json
 import os
 import tempfile
+import time
 
 _STORE = tempfile.mkdtemp(prefix="ascent-test-settings-")
 os.environ["ASCENT_SETTINGS_DIR"] = _STORE
@@ -19,6 +20,23 @@ os.environ["ASCENT_SETTINGS_DIR"] = _STORE
 # A known starting state: defaults, already past setup.
 with open(os.path.join(_STORE, "settings.json"), "w", encoding="utf-8") as handle:
     json.dump({"onboarded": True}, handle)
+
+
+def _stamp_update_check():
+    """Make the update cache look freshly checked, finding nothing.
+
+    Rendering the app calls utils.update.available(), which starts a real
+    request to GitHub when the cache is stale - and an empty store is maximally
+    stale. Without this the suite would make live network calls, be slow and
+    flaky offline, and eventually get the machine rate-limited. A fresh
+    timestamp is the honest way to say "nothing to do" to the code under test.
+    """
+    with open(os.path.join(_STORE, "update-check.json"), "w",
+              encoding="utf-8") as handle:
+        json.dump({"latest": None, "checked_at": time.time()}, handle)
+
+
+_stamp_update_check()
 
 
 import pytest  # noqa: E402
@@ -45,6 +63,7 @@ def clean_project():
     settings_path = os.path.join(_STORE, "settings.json")
     with open(settings_path, "w", encoding="utf-8") as handle:
         json.dump({"onboarded": True}, handle)
+    _stamp_update_check()
     yield
     if os.path.exists(path):
         os.remove(path)

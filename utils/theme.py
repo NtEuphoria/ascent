@@ -320,6 +320,15 @@ _COMPONENTS = """
   background-color:var(--a-accent)!important;
   border-color:var(--a-accent)!important;}
 
+/* st.toggle is not st.checkbox. Base Web builds the switch track as a div,
+   so the rule above - which targets span:first-child - never matched one, and
+   every toggle in the app kept Streamlit's default red (#FF4B4B) regardless of
+   the chosen accent. Confirmed against the live DOM: the track's first child
+   really is DIV,INPUT,DIV rather than the checkbox's SPAN. */
+[data-testid="stCheckbox"]
+  label[data-baseweb="checkbox"]:has(input:checked) > div:first-child{
+  background-color:var(--a-accent)!important;}
+
 /* ---- App header ---- */
 /* The mark appears in the app, not only on the icon. Drawn inline so it takes
    the accent colour and needs no asset to load. */
@@ -1036,13 +1045,44 @@ button[kind="pillsActive"],
    ChatGPT all put it. The sidebar body becomes a flex column so the button can
    be pushed down with margin-top:auto rather than guessed at with padding. */
 [data-testid="stSidebarUserContent"]{display:flex;flex-direction:column;
-  min-height:calc(100vh - 7rem);}
-.st-key-settings_open{margin-top:auto;padding-top:var(--a-s3);}
+  min-height:calc(100vh - 7rem);
+  /* Streamlit leaves 90px of empty space below the sidebar for a deploy
+     widget this app does not have (toolbarMode is minimal). Reclaiming it is
+     what lets the footer group fit above the fold once it holds two rows
+     rather than one. */
+  padding-bottom:var(--a-s4)!important;}
+.st-key-sidebar_footer{padding-top:var(--a-s3);gap:var(--a-s1);}
+/* Sticky rather than merely pushed down: with a long category list the
+   sidebar scrolls, and a notice you have to go looking for is not a notice.
+   The scroll container is stSidebarContent - measured, not assumed.
+
+   This has to sit on the wrapper Streamlit puts around the container rather
+   than on the container itself. That wrapper is the sticky element's
+   containing block and it hugs its contents exactly, so sticky applied one
+   level in has no room to move and silently does nothing: the footer renders
+   at its natural position and Settings falls off the bottom of the window. */
+[data-testid="stLayoutWrapper"]:has(> .st-key-sidebar_footer){
+  margin-top:auto;position:sticky;bottom:0;z-index:3;
+  background:var(--a-raised);}
 .st-key-settings_open button{justify-content:flex-start;
   color:var(--a-ink-muted);border-color:transparent;background:transparent;
   font-size:var(--a-t-sm);}
 .st-key-settings_open button:hover{color:var(--a-accent-ink);
   background:var(--a-accent-soft);border-color:var(--a-accent-line);}
+
+/* The update notice, directly below Settings in the bottom-left corner. It
+   only exists when a newer release actually does, so unlike every other item
+   down here it can afford to carry the accent - a permanently tinted row
+   would just be shouting at somebody who is already up to date. */
+.st-key-update_available a{justify-content:flex-start;
+  color:var(--a-accent-ink)!important;background:var(--a-accent-soft);
+  border:1px solid var(--a-accent-line);font-size:var(--a-t-sm);
+  font-weight:600;text-decoration:none!important;
+  animation:a-rise var(--a-d-slow) var(--a-ease-expo) both;
+  transition:background-color var(--a-d-fast) var(--a-ease-out),
+             border-color var(--a-d-fast) var(--a-ease-out);}
+.st-key-update_available a:hover{background:var(--a-accent-line);
+  border-color:var(--a-accent);}
 
 /* Command palette -------------------------------------------------------
    The trigger is moved off-screen rather than display:none, so the native

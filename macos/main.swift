@@ -166,7 +166,7 @@ func preferredAppearance() -> NSAppearance? {
 
 // MARK: - App
 
-final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
+final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate, WKUIDelegate {
     var window: NSWindow!
     var webView: WKWebView!
     var loadingView: NSView!
@@ -409,6 +409,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
 
         webView = WKWebView(frame: .zero, configuration: WKWebViewConfiguration())
         webView.navigationDelegate = self
+        // Both delegates, because external links arrive by two
+        // different routes - see the routing methods below.
+        webView.uiDelegate = self
         // Without this the web view paints its own white while loading, which
         // flashes against a dark splash. underPageBackgroundColor is the public
         // API for it; the KVC "drawsBackground" trick is private and throws at
@@ -740,6 +743,59 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKNavigationDelegate {
     func webView(_ webView: WKWebView, didFail navigation: WKNavigation!,
                  withError error: Error) {
         log("navigation failed: \(error.localizedDescription)")
+    }
+
+    /// Is this the local Streamlit server, rather than the open internet?
+    ///
+    /// A nil host means about:blank or a data: URL, which the web view
+    /// generates for itself and must be allowed.
+    private func isLocalServer(_ url: URL?) -> Bool {
+        guard let host = url?.host else { return true }
+        return host == "127.0.0.1" || host == "localhost"
+    }
+
+    /// Send a web URL to the user's real browser.
+    ///
+    /// Restricted to http and https on purpose: this is called with a URL that
+    /// came from page content, and NSWorkspace.open will happily launch other
+    /// applications through file:// or a custom scheme.
+    private func openExternally(_ url: URL?) {
+        guard let url = url, url.scheme == "http" || url.scheme == "https",
+              !isLocalServer(url) else { return }
+        log("opening externally: \(url.absoluteString)")
+        NSWorkspace.shared.open(url)
+    }
+
+    /// A link that would navigate this window somewhere else.
+    ///
+    /// Without this, clicking a link to github.com replaces the running app
+    /// with a web page, inside a window that has no back button and no address
+    /// bar. The only way out is to quit.
+    func webView(_ webView: WKWebView,
+                 decidePolicyFor navigationAction: WKNavigationAction,
+                 decisionHandler: @escaping (WKNavigationActionPolicy) -> Void) {
+        let url = navigationAction.request.url
+        if isLocalServer(url) {
+            decisionHandler(.allow)
+            return
+        }
+        openExternally(url)
+        decisionHandler(.cancel)
+    }
+
+    /// A link with target="_blank", which is what Streamlit's link buttons
+    /// emit. A WKWebView with no WKUIDelegate discards these silently: the
+    /// button highlights on hover, clicks, and does nothing whatsoever. That
+    /// is precisely how the Update button would have shipped broken.
+    ///
+    /// Returning nil means "no new web view"; the URL has already gone to the
+    /// browser.
+    func webView(_ webView: WKWebView,
+                 createWebViewWith configuration: WKWebViewConfiguration,
+                 for navigationAction: WKNavigationAction,
+                 windowFeatures: WKWindowFeatures) -> WKWebView? {
+        openExternally(navigationAction.request.url)
+        return nil
     }
 
     /// Cmd-K. Streamlit cannot listen for a keypress itself, so the native menu

@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from typing import Any, Dict
 
 import streamlit as st
@@ -61,6 +62,10 @@ DEFAULTS: Dict[str, Any] = {
     # The Studios introduction card. True once it has been read or dismissed;
     # an announcement that reappears is an advertisement.
     "studios_announced": False,
+    # Update checks. On by default, because an engineering tool that quietly
+    # goes stale is worse than one that asks GitHub once a day - but it is the
+    # only thing in this app that touches the network, so it can be turned off.
+    "check_for_updates": True,
 }
 # Note: there is deliberately no setting to hide assumptions. Stating the
 # assumptions under every result is an accuracy requirement of this app, not a
@@ -76,7 +81,7 @@ _CHOICES = {
     "start_page": START_PAGE_OPTIONS,
 }
 _FLAGS = ("thousands_separator", "show_reference", "show_examples",
-          "onboarded", "studios_announced")
+          "onboarded", "studios_announced", "check_for_updates")
 _SLUG_LISTS = ("favourites", "recents")
 
 
@@ -317,6 +322,45 @@ def panel(calculator_count: int = 0, category_count: int = 0,
                 "categories. For education and preliminary engineering "
                 "calculations - critical designs must be independently "
                 "verified.")
+
+            st.divider()
+            st.caption("Updates")
+            # Imported here rather than at module scope: utils.update reads
+            # SUPPORT_DIR from this module, so importing it at the top would
+            # be a cycle. Settings is the lower-level half of the pair.
+            from utils import update as updates
+
+            if st.button("Check now", key="set_update_check",
+                         use_container_width=True):
+                # Blocking is right here and wrong for the automatic check:
+                # somebody who just pressed a button is waiting for an answer,
+                # so a four-second spinner is honest. The background path can
+                # never justify stalling a render nobody asked to stall.
+                with st.spinner("Asking GitHub..."):
+                    updates.write_cache(updates.fetch(version))
+                st.rerun()
+
+            cache = updates.read_cache()
+            newer = updates.is_newer(cache.get("latest"), version)
+            if newer:
+                st.markdown("**ASCENT {} is available.**".format(
+                    str(cache.get("latest")).lstrip("v")))
+                st.link_button("Open the releases page",
+                               updates.RELEASES_URL, width="stretch")
+            elif cache.get("checked_at"):
+                st.caption("Up to date, as of {}.".format(
+                    time.strftime("%d %b %Y, %H:%M",
+                                  time.localtime(cache["checked_at"]))))
+            else:
+                st.caption("Not checked yet.")
+
+            st.toggle("Check for updates automatically",
+                      value=current["check_for_updates"], key="set_updates",
+                      on_change=_apply("set_updates", "check_for_updates"),
+                      help="Asks GitHub once a day for the latest release "
+                           "tag. This is the only thing ASCENT sends over "
+                           "the network, and it sends nothing about you.")
+
             st.divider()
             st.caption("Keyboard")
             st.markdown(
@@ -330,7 +374,8 @@ def panel(calculator_count: int = 0, category_count: int = 0,
                 reset()
                 for key in ("set_appearance", "set_accent", "set_density",
                             "set_motion", "set_figures", "set_thousands",
-                            "set_reference", "set_examples", "set_start"):
+                            "set_reference", "set_examples", "set_start",
+                            "set_updates"):
                     st.session_state.pop(key, None)
                 close()
                 st.rerun()

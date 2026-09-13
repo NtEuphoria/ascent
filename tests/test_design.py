@@ -173,6 +173,44 @@ def test_the_checkbox_accent_applies_in_every_appearance():
         assert "var(--a-accent)" in block, appearance
 
 
+def test_the_toggle_accent_applies_in_every_appearance():
+    """st.toggle is not st.checkbox. Base Web builds the switch track as a
+    div, so the checkbox rule - which targets span:first-child - never matched
+    one, and every toggle in the app stayed Streamlit red whatever accent was
+    chosen. Verified against the live DOM before this rule was written."""
+    rule = 'label[data-baseweb="checkbox"]:has(input:checked) > div:first-child'
+    for appearance in ("Follow system", "Light", "Dark"):
+        css = theme.stylesheet(appearance, "Full", "Blue", "Comfortable")
+        assert rule in css, appearance
+        block = css.split(rule, 1)[1].split("}", 1)[0]
+        assert "var(--a-accent)" in block, appearance
+
+
+def test_the_sidebar_footer_sticks_via_its_wrapper():
+    """Sticky has to be applied to the wrapper Streamlit puts around the
+    container, not to the container itself.
+
+    That wrapper is the sticky element's containing block and it hugs its
+    contents exactly, so sticky one level in has no room to move and silently
+    does nothing - the footer renders at its natural position and the Settings
+    button drops off the bottom of the window. This failed exactly that way
+    once; the rule looked correct and the layout was wrong.
+    """
+    css = theme.stylesheet("Dark", "Full", "Blue", "Comfortable")
+    rule = '[data-testid="stLayoutWrapper"]:has(> .st-key-sidebar_footer)'
+    assert rule in css
+    block = css.split(rule, 1)[1].split("}", 1)[0]
+    assert "position:sticky" in block
+    assert "bottom:0" in block
+    # Without an opaque background the sidebar's nav items scroll visibly
+    # underneath the pinned footer.
+    assert "background:var(--a-raised)" in block
+    # The container itself must not also claim sticky: two sticky boxes in the
+    # same stack is how the first attempt at this ended up fighting itself.
+    footer = css.split(".st-key-sidebar_footer{", 1)[1].split("}", 1)[0]
+    assert "position:sticky" not in footer
+
+
 def test_the_mark_never_follows_the_accent_setting():
     """An accent is a preference; a mark is an identity. Changing Amber in
     Settings must not repaint the dart amber."""

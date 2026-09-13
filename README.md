@@ -45,6 +45,19 @@ xattr -dr com.apple.quarantine /Applications/ASCENT.app
 ```
 </details>
 
+### Staying up to date
+
+ASCENT asks GitHub once a day whether a newer release exists. When there is
+one, an **Update** button appears at the bottom of the sidebar and opens the
+releases page in your browser; updating is still a matter of downloading the
+new DMG and dragging it over. Nothing happens automatically and nothing is
+installed behind your back.
+
+The check sends no information about you or your machine - it is a single
+request for the latest release tag, and the only network request the app makes
+at all. Turn it off under **Settings -> About** if you would rather it made
+none.
+
 ### Or build it yourself
 
 ```bash

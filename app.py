@@ -21,6 +21,7 @@ from utils import announce, navigate, onboarding, palette
 from utils import render as renderer
 from utils import settings as user_settings
 from utils import ui
+from utils import update as updates
 from utils.spec import normalise
 
 VERSION = "1.1.0"
@@ -247,12 +248,30 @@ def main() -> None:
         st.divider()
         st.caption(ui.DISCLAIMER)
 
-        # Pinned to the bottom of the sidebar by CSS, where a settings entry is
-        # conventionally found.
-        if st.button("⚙  Settings", key="settings_open",
-                     use_container_width=True):
-            user_settings.request_open()
-            st.rerun()
+        # One group pinned to the bottom of the sidebar, rather than pinning
+        # the Settings button alone. With margin-top:auto on Settings itself,
+        # anything drawn after it lands below the fold of a sidebar that is
+        # already min-height:100vh, and the update notice was invisible until
+        # you scrolled - which is the one thing a notice must never be.
+        with st.container(key="sidebar_footer"):
+            # The notice sits above Settings, so Settings stays exactly where
+            # it has always been and the new row appears over it, rather than
+            # the familiar control jumping upward on the day a release lands.
+            # Shown only when there is genuinely something newer: a permanent
+            # "you are up to date" row says nothing 364 days of the year.
+            newer = updates.available(VERSION, prefs["check_for_updates"])
+            if newer:
+                # st.link_button takes no key, so the CSS hook comes from a
+                # keyed container around it. width="stretch" rather than
+                # use_container_width=, which Streamlit has deprecated.
+                with st.container(key="update_available"):
+                    st.link_button("↑  Update to {}".format(newer.lstrip("v")),
+                                   updates.RELEASES_URL, width="stretch")
+
+            if st.button("⚙  Settings", key="settings_open",
+                         use_container_width=True):
+                user_settings.request_open()
+                st.rerun()
 
     user_settings.panel(len(catalogue), len(CATEGORIES), VERSION)
 
