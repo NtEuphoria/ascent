@@ -32,8 +32,15 @@ Applications folder.
 
 **On first open, macOS will refuse to launch it.** ASCENT is not signed with a
 paid Apple Developer certificate, so Gatekeeper blocks it like any app from an
-independent developer. To allow it, **right-click the app and choose Open**,
-then click *Open* in the dialog. You only do this once.
+independent developer.
+
+To allow it, try to open ASCENT once and let it be blocked, then go to
+**System Settings → Privacy & Security**, scroll to the bottom, and click
+**Open Anyway**. You only do this once.
+
+> Older guides say to right-click the app and choose *Open*. Apple removed that
+> shortcut in macOS 15, so on macOS 15 and later the System Settings route
+> above is the one that works.
 
 <details>
 <summary>If you see "ASCENT is damaged and can't be opened"</summary>
