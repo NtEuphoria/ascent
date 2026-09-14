@@ -1,4 +1,4 @@
-"""One project across seventy-eight calculators.
+"""One project, shared across every calculator.
 
 Every page in ASCENT has been an island: work out lift on one, then retype the
 same mass on the drone page, the structures page and the motor page. Nothing

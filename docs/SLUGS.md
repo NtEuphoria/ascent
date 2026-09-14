@@ -111,7 +111,12 @@ Grouped by the section each category belongs to.
 # Studios
 
 ## Studios
+- `studio.drone_powertrain` — Drone powertrain
+- `studio.drivetrain` — Robot drivetrain
 - `studio.lift_arm` — Lift and arm
+- `studio.wing` — Wing study
+- `studio.structure` — Structure
+- `studio.control_tuning` — Control tuning
 
 ## Project
 - `project.board` — Project

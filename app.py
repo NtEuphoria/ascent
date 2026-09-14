@@ -137,15 +137,20 @@ def main() -> None:
     prefs = user_settings.load()
     ui.inject_css(prefs)
 
+    # Built before the first-run check so setup can state the real number of
+    # calculators rather than a figure typed into the copy. That figure went
+    # stale the first time a page was added, and then disagreed with the
+    # sidebar, the palette and the About tab - all three of which count.
+    catalogue = all_calculators()
+
     # First run takes over the whole page. Returning here rather than drawing
     # the app behind it keeps the sidebar, the palette trigger and the
     # navigation widgets from being built at all, so nothing in setup can be
     # knocked out of place by them.
     if onboarding.needed(prefs):
-        onboarding.run(prefs)
+        onboarding.run(prefs, len(catalogue))
         return
 
-    catalogue = all_calculators()
     by_slug = {calc.slug: (category, calc) for category, calc in catalogue}
     modes = mode_of_category()
 

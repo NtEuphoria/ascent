@@ -1,9 +1,10 @@
 """Flight-performance calculators.
 
 Only equations that are exact or have clearly stated assumptions are included.
-Breguet range/endurance is deliberately left out of version 1 because its result
-depends heavily on assumptions (specific fuel consumption, cruise schedule) that
-deserve their own dedicated page rather than a hidden default.
+Breguet range and endurance were held back from version 1 for exactly that
+reason - the answer turns on assumptions that deserve stating rather than
+defaulting - and now have their own page under Drones, "Electric range &
+endurance", where the constant-weight form and its limits are spelled out.
 """
 from __future__ import annotations
 

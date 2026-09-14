@@ -183,18 +183,18 @@ def _finish() -> None:
 # ---------------------------------------------------------------------------
 # Panels
 # ---------------------------------------------------------------------------
-def _welcome(prefs: dict) -> None:
+def _welcome(prefs: dict, count: int) -> None:
     st.markdown(f'<div class="a-ob-mark">{ui.MARK}</div>',
                 unsafe_allow_html=True)
     _heading("Welcome to ASCENT",
-             "Seventy-eight engineering calculators for aerospace, robotics, "
+             f"{count} engineering calculators for aerospace, robotics, "
              "structures and electronics - each one showing its equation, its "
              "assumptions and what actually drives the answer."
              "<br><br>This takes about twenty seconds.", 0)
     _footer(0, "Set up ASCENT")
 
 
-def _appearance(prefs: dict) -> None:
+def _appearance(prefs: dict, count: int) -> None:
     _heading("How should it look?",
              "This applies straight away, so you can see it. Everything here "
              "can be changed later in Settings.", 1)
@@ -207,7 +207,7 @@ def _appearance(prefs: dict) -> None:
     _footer(1)
 
 
-def _accent(prefs: dict) -> None:
+def _accent(prefs: dict, count: int) -> None:
     _heading("Pick an accent.",
              "It colours the result card, the selected page and every "
              "highlight. The mark itself stays blue.", 2)
@@ -220,7 +220,7 @@ def _accent(prefs: dict) -> None:
     _footer(2)
 
 
-def _work(prefs: dict) -> None:
+def _work(prefs: dict, count: int) -> None:
     _heading("What do you work on?",
              "Pick any number. The calculators you are most likely to want get "
              "pinned to the top of your sidebar - you can change them any time "
@@ -241,13 +241,13 @@ def _work(prefs: dict) -> None:
     _footer(3)
 
 
-def _ready(prefs: dict) -> None:
+def _ready(prefs: dict, count: int) -> None:
     chosen = st.session_state.get(PICKS_KEY, [])
     pins = pinned_for(chosen)
     st.markdown(f'<div class="a-ob-mark a-ob-mark-small">{ui.MARK}</div>',
                 unsafe_allow_html=True)
     _heading("You're set.",
-             "Press Command-K at any time to search all seventy-eight "
+             f"Press Command-K at any time to search all {count} "
              "calculators. Every result shows its assumptions underneath - "
              "they are never hidden, because a calculator that drops its "
              "caveats is worse than one that never had them.", 4)
@@ -291,8 +291,13 @@ def _backdrop(prefs: dict) -> None:
         backdrop.render(accent, ink, prefs.get("motion", "Full"))
 
 
-def run(prefs: dict) -> None:
-    """Draw the current panel. Called instead of the app, never alongside it."""
+def run(prefs: dict, count: int) -> None:
+    """Draw the current panel. Called instead of the app, never alongside it.
+
+    `count` is how many calculators the app actually has, passed in rather than
+    written into the copy: the welcome screen claimed seventy-eight while the
+    sidebar, the command palette and the About tab all counted the real total.
+    """
     # The sidebar is empty during setup but Streamlit still reserves its
     # column, which leaves the panel off-centre on the page.
     # Streamlit reserves the sidebar column even when nothing is put in it,
@@ -316,4 +321,4 @@ def run(prefs: dict) -> None:
             + backdrop.LAYER_CSS + "</style>")
     _backdrop(prefs)
     with st.container(key="onboarding"):
-        _PANELS[STEPS[_step()]](prefs)
+        _PANELS[STEPS[_step()]](prefs, count)

@@ -1,6 +1,7 @@
 """Command palette: jump to any calculator in two keystrokes.
 
-With ~75 calculators, a flat list stops being navigable - Hick's law says
+Past a few dozen calculators a flat list stops being navigable - Hick's
+law says
 decision time grows with the number of options, and scanning ten category
 groups to find "hover thrust" is slower than typing "hov".
 

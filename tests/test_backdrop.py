@@ -137,6 +137,35 @@ def test_the_pointer_probe_decays():
 # --------------------------------------------------------------------------
 # Theme
 # --------------------------------------------------------------------------
+def test_the_decorative_frame_carries_no_tooltip():
+    """Streamlit titles its component iframe "st.iframe".
+
+    The backdrop covers the whole viewport with pointer events enabled, so that
+    title surfaced as a native tooltip reading "st.iframe" whenever the pointer
+    sat anywhere outside the panel - on the first screen anyone ever sees. The
+    frame is decoration, so the title is dropped rather than reworded, and it
+    is taken out of the accessibility tree instead.
+    """
+    doc = backdrop._document("#7ab3e8", "#e6edf6", False)
+    assert "removeAttribute('title')" in doc
+    assert "aria-hidden" in doc
+    assert "tabindex" in doc
+
+
+def test_the_tooltip_fix_cannot_take_the_backdrop_down_with_it():
+    """It reaches into the parent document, which is exactly the kind of thing
+    that throws when a browser decides the frame is cross-origin. Wrapped, and
+    placed so a failure cannot stop the canvas being set up."""
+    doc = backdrop._document("#7ab3e8", "#e6edf6", False)
+    # The access itself, not the comment above it explaining why it is there.
+    fix = doc.index("window.frameElement")
+    assert "try {" in doc[:fix], "the frameElement access is not inside a try"
+    assert "catch" in doc[fix:doc.index("getElementById('c')")], (
+        "no catch between the frameElement access and the canvas setup")
+    # The canvas still has to be built after it, or the artwork never appears.
+    assert doc.index("getElementById('c')") > fix
+
+
 def test_colours_are_injected_because_an_iframe_cannot_read_them():
     """A separate document cannot see the parent's custom properties, so the
     resolved values have to be passed in."""

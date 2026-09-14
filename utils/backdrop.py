@@ -58,6 +58,23 @@ def _document(accent: str, ink: str, motion_still: bool) -> str:
 </style></head><body><canvas id="c"></canvas>
 <script>
 (function(){{
+  // Streamlit names this iframe "st.iframe", and the backdrop covers the whole
+  // viewport with pointer-events enabled - so hovering anywhere outside the
+  // panel pops a native tooltip reading "st.iframe" over the first screen
+  // anyone ever sees. The frame is decorative, so the fix is to drop the title
+  // rather than reword it, and to hide it from assistive technology instead.
+  // components.v1.html uses a same-origin srcdoc frame, so frameElement is
+  // reachable from in here; wrapped anyway, because a cross-origin frame would
+  // throw and take the whole backdrop down with it.
+  try {{
+    var host = window.frameElement;
+    if (host) {{
+      host.removeAttribute('title');
+      host.setAttribute('aria-hidden', 'true');
+      host.setAttribute('tabindex', '-1');
+    }}
+  }} catch (e) {{}}
+
   var canvas = document.getElementById('c');
   var ctx = canvas.getContext('2d', {{alpha: true}});
   var ACCENT = {accent!r}, INK = {ink!r}, STILL = {still};

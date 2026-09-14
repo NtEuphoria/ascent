@@ -127,9 +127,10 @@ Run the tests:
 .venv/bin/pip install pytest && .venv/bin/python -m pytest tests/ -q
 ```
 
-206 tests: hand-worked known values for every equation, rejection tests for bad
-inputs, headless renders of every page, and end-to-end checks that each page's
-headline number is what it should be.
+712 tests: hand-worked known values for every equation, rejection tests for bad
+inputs, headless renders of every page, end-to-end checks that each page's
+headline number is what it should be, contrast measured programmatically in
+every theme, and the stream parser exercised over a real pseudo-terminal.
 
 ### Build scripts
 
@@ -148,25 +149,35 @@ by `streamlit run` — the app itself cleans up after itself on quit.
 
 ## What is included
 
-**68 calculators across 13 categories.** Every one shows its equation, defines
-each variable, states its assumptions under the result, and gives a real
-example of where it is used.
+**85 calculators across 16 categories**, in three sections you switch between
+in the sidebar:
 
-| Category | Calculators |
+- **Calculators** — 76 pages, one equation at a time.
+- **Studios** — a guided run through a whole design, carrying one set of
+  numbers from end to end.
+- **Live** — read a device over a serial port, or replay a log.
+
+Every calculator shows its equation, defines each variable, states its
+assumptions under the result, and gives a real example of where it is used.
+
+| Category | Pages |
 | --- | --- |
-| **Aerodynamics** | Lift, drag, dynamic pressure, lift-to-drag ratio, wing loading, aspect ratio, Reynolds number |
-| **Flight performance** | Thrust-to-weight, power-to-weight, stall speed, rate of climb, glide performance |
-| **Drones** | Total thrust, thrust-to-weight, hover thrust per motor, flight-time estimate, electrical power, battery energy |
-| **Propulsion** | Momentum theory, hover power & endurance, motor constants (Kv/Kt), rocket equation |
-| **Mechanical** | F = ma, torque, work, power, momentum, kinetic energy, potential energy, mechanical advantage, gear ratio |
-| **Rotational mechanics** | RPM → rad/s, rotational power, centripetal force, moment of inertia (7 shapes), rotational kinetic energy |
-| **Structures** | Second moment of area, beam bending (6 load cases), elastic constants |
-| **Materials** | Normal stress, strain, Young's modulus, factor of safety, density, specific strength |
-| **Robotics** | Differential drive, reflected inertia, servo torque, encoder resolution |
-| **Electrical / robotics** | Ohm's law, power (three forms), series and parallel resistance, battery energy |
-| **Control systems** | Control error, PID simulator, second-order response, Ziegler–Nichols tuning |
-| **Unit converter** | Length, velocity, mass, force, pressure, energy, power, temperature |
-| **Constants / reference** | Engineering constants, International Standard Atmosphere (0–20 km) |
+| **Project** | Project |
+| **Studios** | Drone powertrain, Robot drivetrain, Lift and arm, Wing study, Structure, Control tuning |
+| **Aerodynamics** | Lift, Drag, Dynamic pressure, Lift-to-drag ratio, Wing loading, Aspect ratio, Reynolds number |
+| **Flight performance** | Thrust-to-weight ratio, Power-to-weight ratio, Stall speed, Rate of climb, Glide performance |
+| **Drones** | Total thrust, Thrust-to-weight ratio, Hover thrust per motor, Flight time (estimate), Electrical power, Battery energy, Battery sag & internal resistance, Electric range & endurance |
+| **Propulsion** | Momentum theory (hover), Hover power & endurance, Propeller advance ratio, Motor constants (Kv, Kt, back-EMF), Rocket equation, Rocket thrust & mass flow |
+| **Mechanical** | Force (F = ma), Torque, Work, Power, Linear momentum, Kinetic energy, Potential energy, Mechanical advantage, Gear ratio |
+| **Rotational mechanics** | Angular velocity (RPM to rad/s), Rotational power, Centripetal force, Moment of inertia, Rotational kinetic energy |
+| **Structures** | Second moment of area, Beam bending, Torsion of a shaft, Column buckling, Elastic constants (E, ν, G, K) |
+| **Materials** | Normal stress, Strain, Young's modulus, Factor of safety, Density, Specific strength |
+| **Robotics** | Differential drive kinematics, Gear train: reflected inertia, Servo / arm holding torque, Encoder resolution, Two-link arm: inverse kinematics |
+| **Electrical / robotics** | Ohm's law, Electrical power, Resistors in series, Resistors in parallel, Battery energy, Wire voltage drop |
+| **Control systems** | Control error, PID simulator, Second-order step response, Ziegler–Nichols tuning |
+| **Live data** | Live monitor, Live calculation |
+| **Unit converter** | Length, Velocity, Mass, Force, Pressure, Energy, Power, Temperature |
+| **Constants / reference** | Engineering constants, Standard atmosphere (ISA) |
 
 Graphs are **interactive** — hover for a readout anywhere on the curve, drag to
 pan, scroll to zoom — and follow light and dark automatically.
@@ -180,7 +191,8 @@ ascent/
 ├── app.py                  # Navigation registry + page shell. Nothing else.
 ├── build.sh                # -> dist/ASCENT.app
 ├── install.sh              # -> /Applications/ASCENT.app
-├── package.sh              # -> dist/ASCENT-<version>.dmg
+├── package.sh              # -> dist/ASCENT-<version>.dmg, window and all
+├── publish.sh              # -> a GitHub release with the DMG attached
 ├── requirements.txt
 ├── LICENSE
 ├── README.md
@@ -188,29 +200,44 @@ ascent/
 │   ├── main.swift          # Cocoa window + WKWebView + engine lifecycle
 │   ├── Info.plist
 │   ├── AppIcon.icns
-│   └── make_icon.py
+│   ├── make_icon.py        # Generates AppIcon.icns
+│   ├── dmg_background.py   # Generates the installer backdrop
+│   └── dmg-background*.png # ...its committed output, 1x and 2x
 ├── .streamlit/
-│   └── config.toml         # Light theme, muted blue accent
+│   └── config.toml         # Deliberately no [theme]: see the file
+├── assets/
+│   └── studios-hero.png
+├── docs/
+│   ├── BACKDROP.md         # What the first-run field is, and why
+│   ├── EXPANSION.md
+│   └── SLUGS.md
 ├── calculators/            # One module per category
-│   ├── aerodynamics.py
-│   ├── flight.py
-│   ├── drones.py
-│   ├── propulsion.py
-│   ├── robotics.py
-│   ├── structures.py
-│   ├── mechanical.py
-│   ├── rotational.py
-│   ├── materials.py
-│   ├── electrical.py
-│   ├── controls.py
-│   ├── units.py
-│   └── reference.py
+│   ├── aerodynamics.py     flight.py         drones.py
+│   ├── propulsion.py       robotics.py       structures.py
+│   ├── mechanical.py       rotational.py     materials.py
+│   ├── electrical.py       controls.py       units.py
+│   ├── reference.py        live.py           project.py
+├── studios/                # Guided end-to-end designs
+│   ├── shell.py            # step / figures / check / verdict board
+│   ├── drone_powertrain.py drivetrain.py     lift_arm.py
+│   └── wing.py             structure.py      control_tuning.py
+├── plugins/
+│   └── ascent-engineering/ # Agents and skills for working on this repo
 ├── utils/
 │   ├── spec.py             # Calculator / Field / Output - a page as data
 │   ├── render.py           # The one renderer that turns a spec into a page
 │   ├── theme.py            # Design tokens, light + dark, motion
+│   ├── analysis.py         # Elasticity, influence, uncertainty propagation
+│   ├── project.py          # Shared parameters and the requirements board
+│   ├── stream.py           # Parses whatever a device prints into channels
+│   ├── livesource.py       # Serial, log playback, demo; and statistics
+│   ├── backdrop.py         # The generative field behind first-run setup
+│   ├── onboarding.py       # First-run setup
+│   ├── announce.py         # The Studios introduction card
+│   ├── update.py           # Asks GitHub once a day if there is a newer build
 │   ├── charts.py           # Interactive Altair charts
 │   ├── palette.py          # Command palette search and ranking
+│   ├── navigate.py         # Deep links and section switching
 │   ├── settings.py         # User preferences, persisted as JSON
 │   ├── constants.py        # g, rho_0, p_0, ... each with a source note
 │   ├── validation.py       # ValidationError + positive/non_zero/in_range...
@@ -218,11 +245,15 @@ ascent/
 │   ├── formatting.py       # Significant-digit number formatting
 │   ├── plotting.py         # Matplotlib style, for the remaining custom plots
 │   └── ui.py               # Page scaffolding: header, inputs, result, notes
-└── tests/
+└── tests/                  # 712 of them
     ├── test_calculations.py    # Physics, hand-checked known values
     ├── test_rendered_values.py # Every page's headline number, end to end
-    ├── test_palette.py         # Command palette search and navigation
-    ├── test_settings.py        # Preferences and their effect on the app
+    ├── test_design.py          # Contrast, motion tokens, stylesheet invariants
+    ├── test_analysis.py        # Elasticity and uncertainty identities
+    ├── test_stream.py          # Every line shape a device might print
+    ├── test_update.py          # Version comparison, caching, the button
+    ├── test_studios.py         # ...and one file per studio
+    ├── test_packaging.py       # What has to be inside the .app
     └── test_app.py             # Renders every page headlessly
 ```
 
@@ -353,15 +384,15 @@ These are deliberate, and worth keeping if you extend the app:
 
 ## Roadmap
 
-- The remaining calculators from the v1.1 plan: drag polar, airspeed and
-  density altitude, electric range and endurance, battery voltage sag,
-  propeller advance ratio, turn performance.
-- Converting the last modules to declarative specs (37 of 68 are converted;
-  the rest work through a compatibility shim).
+- The calculators still outstanding from the v1.1 plan: drag polar, airspeed
+  and density altitude, turn performance.
+- Converting the last modules to declarative specs (50 of 85 are converted;
+  the rest keep full control through a `render=` escape hatch, which some of
+  them genuinely need).
 - **Windows and Linux builds.** The calculators are pure Python and already
   run anywhere Streamlit does; only the native window needs porting.
-- Breguet range and endurance, once they can be given a page that makes their
-  assumptions explicit.
+- **Notarisation.** Until then Gatekeeper blocks the app on first open and
+  everyone has to go through System Settings to allow it.
 - Aerofoil polar lookup, so lift and drag coefficients stop being guesses.
 
 ## Limitations
@@ -370,5 +401,7 @@ These are deliberate, and worth keeping if you extend the app:
 - The PID page simulates a first-order plant with perfect measurement and no
   time delay. It builds intuition; it does not model your hardware.
 - The ISA model covers 0–20 km geopotential altitude, dry air only.
-- Range and endurance (Breguet) are deliberately not included yet — they depend
-  on assumptions that deserve their own page rather than a hidden default.
+- Range and endurance use the constant-weight (electric) Breguet form. A
+  fuel-burning aircraft gets lighter as it flies and needs the log-mass-ratio
+  form instead; the page says so rather than quietly giving a wrong answer.
+- The app is not notarised by Apple, so macOS blocks it on first open.
