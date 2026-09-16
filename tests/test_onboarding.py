@@ -6,10 +6,49 @@ onboarding at all.
 """
 from __future__ import annotations
 
+import json
+import os
+import sys
+
 import pytest
 
-from utils import onboarding, settings
-from utils.onboarding import DISCIPLINES, MAX_PINNED, pinned_for
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, ROOT)
+
+from streamlit.testing.v1 import AppTest  # noqa: E402
+
+from utils import announce, onboarding, settings  # noqa: E402
+from utils.onboarding import DISCIPLINES, MAX_PINNED, pinned_for  # noqa: E402
+
+APP_PATH = os.path.join(ROOT, "app.py")
+
+
+def _first_run(settings_path):
+    """An app started with no settings file at all.
+
+    That is what a real first launch looks like: the native shell creates the
+    support directory for its log before Python starts, so the directory is
+    there and the file is not. Every other test in this suite runs with
+    onboarded already true, which is why none of them can catch a first run
+    that has stopped working.
+    """
+    if os.path.exists(settings_path):
+        os.remove(settings_path)
+    at = AppTest.from_file(APP_PATH, default_timeout=120)
+    at.run()
+    assert not at.exception, at.exception
+    return at
+
+
+def _finish_setup(at):
+    """Click straight through setup, accepting every default."""
+    for step in range(len(onboarding.STEPS)):
+        forward = [b for b in at.button if b.key == "ob_next_%d" % step]
+        assert forward, "step %d has no forward button; found %s" % (
+            step, [b.key for b in at.button])
+        forward[0].click().run()
+        assert not at.exception, at.exception
+    return at
 
 
 # --------------------------------------------------------------------------
@@ -117,3 +156,77 @@ def test_setup_can_be_run_again_from_settings(real_settings_file):
     settings.update(onboarded=False)
     assert onboarding.needed(settings.load())
     assert "set_onboard" in open("utils/settings.py", encoding="utf-8").read()
+
+
+# --------------------------------------------------------------------------
+# The whole first run, end to end
+#
+# These are the only tests in the suite that start from no settings file.
+# conftest writes onboarded=True before every other test, which is what makes
+# the app testable at all - and what makes a broken first run invisible.
+# --------------------------------------------------------------------------
+def test_a_brand_new_user_gets_setup(real_settings_file):
+    at = _first_run(real_settings_file)
+    assert "Welcome to ASCENT" in " ".join(b.value for b in at.markdown)
+
+
+def test_setup_is_the_only_thing_on_screen(real_settings_file):
+    """Two first-run interruptions must not stack. The sidebar is not drawn
+    during setup, so the Studios card cannot appear behind or beside it."""
+    at = _first_run(real_settings_file)
+    keys = {b.key for b in at.button}
+    assert "ann_open" not in keys, "the Studios card is competing with setup"
+    assert "settings_open" not in keys, "the sidebar is being drawn during setup"
+
+
+def test_finishing_setup_leads_to_the_studios_card(real_settings_file):
+    """The point of the whole exercise: a new user sees setup, and then sees
+    what Studios is. The card is drawn by app.py, so this breaks if the call
+    site is moved or lost - which no unit test on announce.needed would show."""
+    at = _finish_setup(_first_run(real_settings_file))
+    keys = {b.key for b in at.button}
+    assert "ann_open" in keys, "no Studios card after setup; found %s" % sorted(
+        k for k in keys if k)
+    assert "ann_dismiss" in keys
+
+
+def test_setup_does_not_come_back_after_it_is_finished(real_settings_file):
+    at = _finish_setup(_first_run(real_settings_file))
+    assert "Welcome to ASCENT" not in " ".join(b.value for b in at.markdown)
+    assert {b.key for b in at.button} & {"settings_open"}, "the app did not draw"
+
+
+def test_finishing_setup_does_not_silently_dismiss_the_announcement(
+        real_settings_file):
+    """_finish() writes onboarded and favourites. If it ever wrote the whole
+    settings dict instead, it would take studios_announced with it and the
+    card would never be shown to anyone who completed setup."""
+    _finish_setup(_first_run(real_settings_file))
+    saved = json.load(open(real_settings_file, encoding="utf-8"))
+    assert saved["onboarded"] is True
+    assert saved["studios_announced"] is False
+    assert announce.needed(saved)
+
+
+def test_the_card_stays_gone_once_dismissed(real_settings_file):
+    """An announcement that reappears is an advertisement."""
+    at = _finish_setup(_first_run(real_settings_file))
+    [b for b in at.button if b.key == "ann_dismiss"][0].click().run()
+    assert not at.exception, at.exception
+    assert "ann_open" not in {b.key for b in at.button}
+    saved = json.load(open(real_settings_file, encoding="utf-8"))
+    assert saved["studios_announced"] is True
+
+    # And not on the next launch either.
+    again = AppTest.from_file(APP_PATH, default_timeout=120)
+    again.run()
+    assert not again.exception
+    assert "ann_open" not in {b.key for b in again.button}
+
+
+def test_the_card_needs_its_artwork_to_be_shipped():
+    """The hero image lives outside the Python packages, so it is copied into
+    the bundle by a separate rule in build.sh. Without it the card still draws,
+    but as text - which is not what was designed."""
+    assert announce.hero_path(), (
+        "assets/studios-hero.png is missing from the source tree")
