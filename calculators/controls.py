@@ -624,8 +624,7 @@ _SECOND_ORDER = Calculator(
                  "None of it depends on ωn.",
         ),
     ],
-    related=["ctrl.pid", "ctrl.ziegler_nichols", "ctrl.sample_rate",
-             "ctrl.steady_state_error"],
+    related=["ctrl.pid", "ctrl.ziegler_nichols"],
     variables=[
         ("$\\zeta$", "Damping ratio", "-"),
         ("$\\omega_n$", "Natural frequency", "rad/s"),

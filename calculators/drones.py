@@ -606,8 +606,8 @@ _DRONE_TWR = Calculator(
                  "nothing held back for attitude control.",
         ),
     ],
-    related=["drone.total_thrust", "drone.hover_thrust", "prop.hover_endurance",
-             "flight.twr", "drone.battery_sag"],
+    related=["drone.total_thrust", "drone.hover_thrust",
+             "prop.hover_endurance", "flight.twr", "drone.battery_sag"],
     variables=[
         ("$T_{total}$", "Total thrust from all motors", "N"),
         ("$W$", "All-up weight", "N"), ("$m$", "All-up mass", "kg"),
@@ -1081,7 +1081,7 @@ _POWER = Calculator(
         ),
     ],
     related=["drone.battery_sag", "drone.battery_energy", "drone.flight_time",
-             "electrical___robotics.ohm's_law", "prop.motor_constants"],
+             "elec.ohms_law", "prop.motor_constants"],
     variables=[("$P$", "Electrical power", "W"), ("$V$", "Voltage", "V"),
                ("$I$", "Current", "A")],
     example=(
@@ -1200,7 +1200,7 @@ _BATTERY = Calculator(
         ),
     ],
     related=["drone.flight_time", "drone.battery_sag", "drone.power",
-             "prop.hover_endurance", "electrical___robotics.battery_energy"],
+             "prop.hover_endurance", "elec.battery_energy"],
     variables=[
         ("$E_{Wh}$", "Stored energy", "Wh"),
         ("$V$", "Nominal pack voltage", "V"),
@@ -1404,7 +1404,7 @@ _BATTERY_SAG = Calculator(
         _CELL_VOLTAGE_TABLE,
     ],
     related=["drone.flight_time", "drone.power", "drone.battery_energy",
-             "electrical___robotics.ohm's_law", "prop.motor_constants"],
+             "elec.ohms_law", "prop.motor_constants"],
     variables=[
         ("$V_{load}$", "Pack voltage while the load is applied", "V"),
         ("$V_{oc}$", "Open-circuit (rested) pack voltage", "V"),

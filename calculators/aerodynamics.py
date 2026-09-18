@@ -395,8 +395,7 @@ _DRAG = Calculator(
                  "C_D is higher - add C_L²/(π e AR) from the drag polar page.",
         ),
     ],
-    related=["aero.drag_polar", "aero.dynamic_pressure", "aero.lift_to_drag",
-             "aero.mach", "flight.glide"],
+    related=["aero.dynamic_pressure", "aero.lift_to_drag", "flight.glide"],
     variables=[
         ("$D$", "Drag force", "N"),
         ("$\\rho$", "Air density", "kg/m³"),
@@ -508,7 +507,7 @@ _DYNAMIC_PRESSURE = Calculator(
                  "falls to about a third.",
         ),
     ],
-    related=["aero.lift", "aero.drag", "aero.mach", "aero.reynolds",
+    related=["aero.lift", "aero.drag", "aero.reynolds",
              "constants___reference.standard_atmosphere_(isa)"],
     variables=[
         ("$q$", "Dynamic pressure", "Pa"),
@@ -642,8 +641,8 @@ _LIFT_TO_DRAG = Calculator(
                  "mass, with no wind and no lift or sink.",
         ),
     ],
-    related=["aero.drag_polar", "flight.glide", "aero.aspect_ratio",
-             "aero.drag", "flight.stall_speed"],
+    related=["flight.glide", "aero.aspect_ratio", "aero.drag",
+             "flight.stall_speed"],
     variables=[
         ("$C_L$", "Lift coefficient", "-"),
         ("$C_D$", "Drag coefficient", "-"),
@@ -820,7 +819,7 @@ _WING_LOADING = Calculator(
         ),
     ],
     related=["flight.stall_speed", "aero.lift", "aero.aspect_ratio",
-             "aero.drag_polar", "flight.glide"],
+             "flight.glide"],
     variables=[
         ("$W$", "Weight (force), W = m g", "N"),
         ("$S$", "Wing reference area", "m²"),
@@ -993,8 +992,8 @@ _ASPECT_RATIO = Calculator(
                  "little drag for a great deal of structure.",
         ),
     ],
-    related=["aero.drag_polar", "aero.lift_to_drag", "aero.wing_loading",
-             "aero.drag", "flight.glide"],
+    related=["aero.lift_to_drag", "aero.wing_loading", "aero.drag",
+             "flight.glide"],
     variables=[
         ("$AR$", "Aspect ratio", "-"),
         ("$b$", "Wingspan, tip to tip", "m"),

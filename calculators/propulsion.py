@@ -623,8 +623,8 @@ _MOMENTUM = Calculator(
                  "power per unit thrust goes as sqrt(DL).",
         ),
     ],
-    related=["prop.hover_endurance", "prop.advance_ratio", "drone.hover_thrust",
-             "drone.flight_time", "drone.power"],
+    related=["prop.hover_endurance", "prop.advance_ratio",
+             "drone.hover_thrust", "drone.flight_time", "drone.power"],
     variables=[
         ("$T$", "Thrust produced by one rotor", "N"),
         ("$A$", "Swept disk area, pi R squared", "m²"),
@@ -1352,8 +1352,7 @@ _MOTOR = Calculator(
         ),
     ],
     related=["prop.hover_endurance", "prop.advance_ratio", "drone.power",
-             "electrical___robotics.electrical_power",
-             "rotational_mechanics.rotational_power"],
+             "elec.power", "rotational_mechanics.rotational_power"],
     variables=[
         ("$K_v$", "Speed constant, unloaded", "rpm/V"),
         ("$K_t$", "Torque constant", "N·m/A"),
@@ -1562,7 +1561,8 @@ _ROCKET = Calculator(
         ),
     ],
     related=["prop.rocket_thrust", "mech.momentum", "flight.twr",
-             "mech.kinetic_energy", "constants___reference.engineering_constants"],
+             "mech.kinetic_energy",
+             "constants___reference.engineering_constants"],
     variables=[
         ("$\\Delta v$", "Achievable velocity change", "m/s"),
         ("$I_{sp}$", "Specific impulse", "s"),

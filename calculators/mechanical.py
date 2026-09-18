@@ -465,7 +465,7 @@ _TORQUE = Calculator(
         ),
     ],
     related=["robot.servo_torque", "rotational_mechanics.rotational_power",
-             "mech.gear_ratio", "mech.mechanical_advantage", "mech.lead_screw"],
+             "mech.gear_ratio", "mech.mechanical_advantage"],
     variables=[
         ("$\\tau$", "Torque about the axis", "N·m"),
         ("$r$", "Lever arm (perpendicular distance to the axis)", "m"),
@@ -572,7 +572,7 @@ _WORK = Calculator(
         ),
     ],
     related=["mech.power", "mech.potential_energy", "mech.kinetic_energy",
-             "electrical___robotics.battery_energy", "mech.friction"],
+             "elec.battery_energy"],
     variables=[
         ("$W$", "Work (energy transferred)", "J"),
         ("$F$", "Applied force", "N"), ("$d$", "Distance moved", "m"),
@@ -679,8 +679,7 @@ _POWER = Calculator(
         ),
     ],
     related=["mech.work", "rotational_mechanics.rotational_power",
-             "flight.power_to_weight", "drone.power",
-             "electrical___robotics.electrical_power"],
+             "flight.power_to_weight", "drone.power", "elec.power"],
     variables=[("$P$", "Power", "W"), ("$W$", "Work done", "J"),
                ("$t$", "Time taken", "s")],
     example=(
@@ -779,8 +778,8 @@ _MOMENTUM = Calculator(
                  "last longer.",
         ),
     ],
-    related=["mech.kinetic_energy", "mech.force", "mech.friction",
-             "mech.work", "materials.normal_stress"],
+    related=["mech.kinetic_energy", "mech.force", "mech.work",
+             "materials.normal_stress"],
     variables=[("$p$", "Linear momentum", "kg·m/s"), ("$m$", "Mass", "kg"),
                ("$v$", "Velocity (signed)", "m/s")],
     example=(
@@ -895,7 +894,7 @@ _KINETIC = Calculator(
         ),
     ],
     related=["mech.momentum", "mech.potential_energy", "mech.work",
-             "mech.power", "mech.friction"],
+             "mech.power"],
     variables=[("$KE$", "Kinetic energy", "J"), ("$m$", "Mass", "kg"),
                ("$v$", "Speed", "m/s")],
     example=(

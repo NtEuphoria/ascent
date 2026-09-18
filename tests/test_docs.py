@@ -190,3 +190,38 @@ def test_every_onboarding_panel_takes_the_count():
     for step in onboarding.STEPS:
         params = list(inspect.signature(onboarding._PANELS[step]).parameters)
         assert params == ["prefs", "count"], "%s takes %s" % (step, params)
+
+
+# ---------------------------------------------------------------------------
+# Cross-links
+#
+# utils/render.py builds the Related tab with
+#   [catalogue[slug] for slug in calc.related if slug in catalogue]
+# so a slug naming no page is skipped in silence. Six of them had been dead for
+# a while, pointing at electrical___robotics.* slugs from before that module
+# took explicit ones - the links simply stopped appearing and nothing said so.
+# ---------------------------------------------------------------------------
+
+def test_every_cross_link_points_at_a_real_page():
+    real = {calc.slug for _, calc in all_pages()}
+    broken = sorted((calc.slug, target) for _, calc in all_pages()
+                    for target in (calc.related or ()) if target not in real)
+    assert not broken, "related= targets that name no page: %s" % broken
+
+
+def test_no_page_links_to_itself():
+    """A Related tab offering the page you are already on is noise."""
+    loops = sorted(calc.slug for _, calc in all_pages()
+                   if calc.slug in (calc.related or ()))
+    assert not loops, "pages linking to themselves: %s" % loops
+
+
+def test_cross_links_are_not_repeated():
+    repeats = []
+    for _, calc in all_pages():
+        seen = set()
+        for target in (calc.related or ()):
+            if target in seen:
+                repeats.append((calc.slug, target))
+            seen.add(target)
+    assert not repeats, "duplicated related= targets: %s" % repeats

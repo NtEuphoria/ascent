@@ -16,6 +16,8 @@ from utils import ui
 from utils import validation as v
 from utils.constants import A_SL, G0
 from utils.plotting import PRIMARY, mark_point, new_figure, show
+from utils.spec import (Calculator, Check, Field, Output, Secondary,
+                        Sweep)
 
 # ---------------------------------------------------------------------------
 # Moment-of-inertia shape library
@@ -122,177 +124,6 @@ def rotational_kinetic_energy(inertia: float, omega: float) -> float:
 # ---------------------------------------------------------------------------
 
 
-def render_angular_velocity() -> None:
-    p = "rot_omega"
-    ui.page_header(
-        "Angular velocity from RPM",
-        r"\omega = \frac{2\pi\,n}{60}",
-        "Motors are specified in RPM, but every rotational equation needs radians "
-        "per second. One revolution is 2*π radians and one minute is 60 seconds, "
-        "so the conversion factor is 2*π/60, about 0.1047.",
-        p,
-    )
-    c1, c2 = st.columns(2)
-    with c1:
-        rpm = ui.number("Rotational speed n", "rpm", f"{p}_rpm", 8000.0)
-    with c2:
-        radius = ui.number("Radius (optional, for tip speed)", "m", f"{p}_r", 0.127,
-                           min_value=0.0,
-                           help="Propeller radius: a 10-inch prop has a 5-inch "
-                                "(0.127 m) radius.")
-
-    value = ui.compute(lambda: rpm_to_rad_s(rpm))
-    if value is not None:
-        tip_speed = value * radius
-        ui.result(
-            "Angular velocity ω", value, "rad/s",
-            secondary=[
-                ("Revolutions per second", rpm / 60.0, "rev/s"),
-                ("Time for one revolution", 60.0 / rpm if rpm != 0
-                 else float("nan"), "s"),
-                ("Tip speed at this radius", tip_speed, "m/s"),
-                ("Tip Mach number (ISA sea level)", tip_speed / A_SL, "-"),
-            ],
-        )
-        if tip_speed / A_SL > 0.7:
-            st.caption("Tip Mach above about 0.7 causes a sharp rise in noise and "
-                       "a loss of propeller efficiency as compressibility sets in.")
-    ui.assumptions([
-        "An exact unit conversion, not an approximation.",
-        "Tip speed v = ω × r is the rotational component only; in forward "
-        "flight the advancing blade sees the vehicle's airspeed on top of it.",
-        "Tip Mach number uses the ISA sea-level speed of sound, 340.29 m/s. It is "
-        "lower in cold air, so the same RPM is closer to the limit at altitude.",
-    ])
-    ui.reference(
-        variables=[
-            ("$\\omega$", "Angular velocity", "rad/s"),
-            ("$n$", "Rotational speed", "rpm"),
-            ("$r$", "Radius", "m"),
-        ],
-        example="Propeller design check. A 10x4.5 prop at 8000 rpm has a tip speed "
-                "of 106 m/s, Mach 0.31 - comfortable. Spin the same prop at 20,000 "
-                "rpm and the tip reaches Mach 0.78, where it gets loud and "
-                "inefficient.",
-    )
-
-
-def render_rotational_power() -> None:
-    p = "rot_power"
-    ui.page_header(
-        "Rotational power",
-        r"P = \tau\,\omega = \frac{2\pi\,n\,\tau}{60}",
-        "The rotating equivalent of P = F × v. This is the bridge between a "
-        "motor's torque curve and the power it actually delivers - and it is why "
-        "a motor that makes good torque at low RPM can still be low-powered.",
-        p,
-    )
-    c1, c2 = st.columns(2)
-    with c1:
-        torque_nm = ui.number("Torque τ", "N·m", f"{p}_tq", 0.35)
-    with c2:
-        rpm = ui.number("Rotational speed n", "rpm", f"{p}_rpm", 8000.0)
-
-    omega = ui.compute(lambda: rpm_to_rad_s(rpm))
-    value = None if omega is None else ui.compute(
-        lambda: rotational_power(torque_nm, omega))
-    if value is not None:
-        ui.result(
-            "Mechanical power P", value, "W",
-            secondary=[
-                ("Angular velocity", omega, "rad/s"),
-                ("In horsepower (mechanical)", value / 745.6998715822702, "hp"),
-                ("Torque in kgf·cm", torque_nm / G0 * 100.0, "kgf·cm"),
-            ],
-        )
-    ui.assumptions([
-        "ω must be in rad/s. Using RPM directly here is a very common error "
-        "and gives an answer 9.55 times too large - the conversion is done for you.",
-        "This is shaft power out of the motor, before gearbox and propeller "
-        "losses.",
-        "Torque and speed are taken at the same operating point. A motor's torque "
-        "falls as speed rises, so you cannot combine peak torque with peak RPM.",
-    ])
-
-    if ui.graph_toggle(p):
-        speeds = np.linspace(0.0, max(rpm * 1.6, 1000.0), 200)
-        fig, (ax,) = new_figure()
-        ax.plot(speeds, torque_nm * speeds * 2.0 * np.pi / 60.0, color=PRIMARY,
-                linewidth=2)
-        mark_point(ax, rpm, torque_nm * rpm_to_rad_s(rpm), "current")
-        ax.set_xlabel("Rotational speed [rpm]")
-        ax.set_ylabel("Power [W]")
-        ax.set_title("Power vs speed at constant torque", fontsize=10, loc="left")
-        show(fig)
-
-    ui.reference(
-        variables=[
-            ("$P$", "Mechanical (shaft) power", "W"),
-            ("$\\tau$", "Torque", "N·m"),
-            ("$\\omega$", "Angular velocity", "rad/s"),
-            ("$n$", "Rotational speed", "rpm"),
-        ],
-        example="Motor selection for a drone. A motor holding 0.35 N·m at 8000 rpm "
-                "delivers 293 W of shaft power. If the ESC draws 400 W electrical "
-                "at that point, the motor is running at about 73% efficiency.",
-    )
-
-
-def render_centripetal() -> None:
-    p = "rot_fc"
-    ui.page_header(
-        "Centripetal force",
-        r"F_c = \frac{m\,v^{2}}{r} = m\,\omega^{2} r",
-        "The inward force needed to keep something moving in a circle. It does not "
-        "push outward - the outward feeling is inertia. This is what holds a "
-        "propeller blade onto its hub and what the wing supplies in a banked turn.",
-        p,
-    )
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        mass = ui.number("Mass m", "kg", f"{p}_m", 0.01, min_value=0.0,
-                         help="For a propeller blade, use the blade's own mass.")
-    with c2:
-        velocity = ui.number("Tangential velocity v", "m/s", f"{p}_v", 106.0)
-    with c3:
-        radius = ui.number("Radius r", "m", f"{p}_r", 0.127, min_value=0.0)
-
-    value = ui.compute(lambda: centripetal_force(mass, velocity, radius))
-    if value is not None:
-        accel = velocity ** 2 / radius if radius > 0 else float("nan")
-        ui.result(
-            "Centripetal force F_c", value, "N",
-            secondary=[
-                ("Centripetal acceleration", accel, "m/s²"),
-                ("As a multiple of gravity", accel / G0, "g"),
-                ("Angular velocity", velocity / radius if radius > 0
-                 else float("nan"), "rad/s"),
-                ("Equivalent rotational speed", rad_s_to_rpm(velocity / radius)
-                 if radius > 0 else float("nan"), "rpm"),
-            ],
-        )
-    ui.assumptions([
-        "Uniform circular motion at constant speed and constant radius.",
-        "The mass is treated as concentrated at radius r. For a real propeller "
-        "blade the mass is distributed, so use the radius of its centre of mass.",
-        "F_c points toward the centre. There is no outward 'centrifugal force' in "
-        "an inertial frame - only the inertia of the mass.",
-    ])
-    ui.reference(
-        variables=[
-            ("$F_c$", "Centripetal force", "N"),
-            ("$m$", "Mass in circular motion", "kg"),
-            ("$v$", "Tangential speed", "m/s"),
-            ("$r$", "Radius of the circular path", "m"),
-            ("$\\omega$", "Angular velocity", "rad/s"),
-        ],
-        example="Propeller hub loads. A 10 g blade section whose centre of mass "
-                "sits at 0.127 m, moving at 106 m/s, pulls 885 N on the hub - about "
-                "9000 times its own weight. That is why propeller root failures are "
-                "so violent, and why cracked props must never be flown.",
-    )
-
-
 def render_moment_of_inertia() -> None:
     p = "rot_moi"
     shapes = list(MOI_SHAPES.keys())
@@ -360,62 +191,255 @@ def render_moment_of_inertia() -> None:
     )
 
 
-def render_rotational_ke() -> None:
-    p = "rot_ke"
-    ui.page_header(
-        "Rotational kinetic energy",
-        r"KE_{rot} = \tfrac{1}{2}\,I\,\omega^{2}",
+
+
+# ---------------------------------------------------------------------------
+# Declarative pages
+#
+# Moment of inertia keeps render= above: its shape picker rewrites the equation,
+# the dimension's label and its unit as you choose, which is genuinely
+# imperative. The four below are plain equations and get the renderer's
+# influence table, uncertainty propagation, project binding and sweeps.
+# ---------------------------------------------------------------------------
+
+ANGULAR_VELOCITY = Calculator(
+    slug="rotational_mechanics.angular_velocity_(rpm_to_rad/s)",
+    name="Angular velocity (RPM to rad/s)",
+    latex=r"\omega = \frac{2\pi\,n}{60}",
+    explanation=(
+        "Motors are specified in RPM, but every rotational equation needs "
+        "radians per second. One revolution is 2*π radians and one minute is 60 "
+        "seconds, so the conversion factor is 2*π/60, about 0.1047."
+    ),
+    inputs=[
+        Field("rpm", "Rotational speed n", "rpm", 8000.0),
+        Field("radius", "Radius (optional, for tip speed)", "m", 0.127, min=0.0,
+              help="Propeller radius: a 10-inch prop has a 5-inch (0.127 m) "
+                   "radius. It does not affect ω itself, only the tip figures."),
+    ],
+    compute=lambda i: rpm_to_rad_s(i.rpm),
+    result=Output("Angular velocity ω", "rad/s"),
+    secondary=[
+        Secondary("Revolutions per second", "rev/s", lambda i, r: i.rpm / 60.0),
+        Secondary("Time for one revolution", "s",
+                  lambda i, r: 60.0 / i.rpm if i.rpm else float("nan")),
+        Secondary("Tip speed at this radius", "m/s", lambda i, r: r * i.radius),
+        Secondary("Tip Mach number (ISA sea level)", "-",
+                  lambda i, r: r * i.radius / A_SL),
+    ],
+    assumptions=[
+        "An exact unit conversion, not an approximation.",
+        "Tip speed v = ω × r is the rotational component only; in forward "
+        "flight the advancing blade sees the vehicle's airspeed on top of it.",
+        "Tip Mach number uses the ISA sea-level speed of sound, 340.29 m/s. It is "
+        "lower in cold air, so the same RPM is closer to the limit at altitude.",
+        "Radius changes none of the tip figures' parent quantity: ω depends only "
+        "on RPM, which is why the influence table shows radius as having no "
+        "effect on the headline number.",
+    ],
+    variables=[
+        ("$\\omega$", "Angular velocity", "rad/s"),
+        ("$n$", "Rotational speed", "rpm"),
+        ("$r$", "Radius", "m"),
+    ],
+    example="Propeller design check. A 10x4.5 prop at 8000 rpm has a tip speed "
+            "of 106 m/s, Mach 0.31 - comfortable. Spin the same prop at 20,000 "
+            "rpm and the tip reaches Mach 0.78, where it gets loud and "
+            "inefficient.",
+    checks=[
+        Check(lambda i, r: ("warning",
+                            "Tip Mach %.2f. Above about 0.7 compressibility sets "
+                            "in: noise rises sharply and propeller efficiency "
+                            "falls away." % (r * i.radius / A_SL))
+              if i.radius > 0 and r * i.radius / A_SL > 0.7 else None),
+    ],
+    related=["rotational_mechanics.rotational_power",
+             "rotational_mechanics.centripetal_force",
+             "rotational_mechanics.rotational_kinetic_energy"],
+    keywords=("rpm", "omega", "rad/s", "tip speed", "mach", "conversion"),
+)
+
+
+ROTATIONAL_POWER = Calculator(
+    slug="rotational_mechanics.rotational_power",
+    name="Rotational power",
+    latex=r"P = \tau\,\omega = \frac{2\pi\,n\,\tau}{60}",
+    explanation=(
+        "The rotating equivalent of P = F × v. This is the bridge between a "
+        "motor's torque curve and the power it actually delivers - and it is why "
+        "a motor that makes good torque at low RPM can still be low-powered."
+    ),
+    inputs=[
+        Field("torque_nm", "Torque τ", "N·m", 0.35),
+        Field("rpm", "Rotational speed n", "rpm", 8000.0),
+    ],
+    compute=lambda i: rotational_power(i.torque_nm, rpm_to_rad_s(i.rpm)),
+    result=Output("Mechanical power P", "W"),
+    secondary=[
+        Secondary("Angular velocity", "rad/s", lambda i, r: rpm_to_rad_s(i.rpm)),
+        Secondary("In horsepower (mechanical)", "hp",
+                  lambda i, r: r / 745.6998715822702),
+        Secondary("Torque in kgf·cm", "kgf·cm",
+                  lambda i, r: i.torque_nm / G0 * 100.0),
+    ],
+    assumptions=[
+        "ω must be in rad/s. Using RPM directly here is a very common error "
+        "and gives an answer 9.55 times too large - the conversion is done for "
+        "you.",
+        "This is shaft power out of the motor, before gearbox and propeller "
+        "losses.",
+        "Torque and speed are taken at the same operating point. A motor's torque "
+        "falls as speed rises, so you cannot combine peak torque with peak RPM.",
+    ],
+    variables=[
+        ("$P$", "Mechanical (shaft) power", "W"),
+        ("$\\tau$", "Torque", "N·m"),
+        ("$\\omega$", "Angular velocity", "rad/s"),
+        ("$n$", "Rotational speed", "rpm"),
+    ],
+    example="Motor selection for a drone. A motor holding 0.35 N·m at 8000 rpm "
+            "delivers 293 W of shaft power. If the ESC draws 400 W electrical "
+            "at that point, the motor is running at about 73% efficiency.",
+    graphs=[
+        Sweep(over="rpm", y_label="Power P [W]",
+              title="Power vs speed at constant torque", hi_factor=1.6),
+    ],
+    related=["mech.torque", "mech.power", "elec.power",
+             "rotational_mechanics.angular_velocity_(rpm_to_rad/s)"],
+    keywords=("shaft power", "torque", "watts", "horsepower", "motor"),
+)
+
+
+CENTRIPETAL_FORCE = Calculator(
+    slug="rotational_mechanics.centripetal_force",
+    name="Centripetal force",
+    latex=r"F_c = \frac{m\,v^{2}}{r} = m\,\omega^{2} r",
+    explanation=(
+        "The inward force needed to keep something moving in a circle. It does "
+        "not push outward - the outward feeling is inertia. This is what holds a "
+        "propeller blade onto its hub and what the wing supplies in a banked turn."
+    ),
+    inputs=[
+        Field("mass", "Mass m", "kg", 0.01, min=0.0,
+              help="For a propeller blade, use the blade's own mass."),
+        Field("velocity", "Tangential velocity v", "m/s", 106.0),
+        Field("radius", "Radius r", "m", 0.127, min=0.0),
+    ],
+    compute=lambda i: centripetal_force(i.mass, i.velocity, i.radius),
+    result=Output("Centripetal force F_c", "N"),
+    secondary=[
+        Secondary("Centripetal acceleration", "m/s²",
+                  lambda i, r: i.velocity ** 2 / i.radius),
+        Secondary("As a multiple of gravity", "g",
+                  lambda i, r: i.velocity ** 2 / i.radius / G0),
+        Secondary("Angular velocity", "rad/s",
+                  lambda i, r: i.velocity / i.radius),
+        Secondary("Equivalent rotational speed", "rpm",
+                  lambda i, r: rad_s_to_rpm(i.velocity / i.radius)),
+        Secondary("As a multiple of the mass's own weight", "-",
+                  lambda i, r: r / (i.mass * G0)),
+    ],
+    assumptions=[
+        "Uniform circular motion at constant speed and constant radius.",
+        "The mass is treated as concentrated at radius r. For a real propeller "
+        "blade the mass is distributed, so use the radius of its centre of mass.",
+        "F_c points toward the centre. There is no outward 'centrifugal force' in "
+        "an inertial frame - only the inertia of the mass.",
+    ],
+    variables=[
+        ("$F_c$", "Centripetal force", "N"),
+        ("$m$", "Mass in circular motion", "kg"),
+        ("$v$", "Tangential speed", "m/s"),
+        ("$r$", "Radius of the circular path", "m"),
+        ("$\\omega$", "Angular velocity", "rad/s"),
+    ],
+    example="Propeller hub loads. A 10 g blade section whose centre of mass "
+            "sits at 0.127 m, moving at 106 m/s, pulls 885 N on the hub - about "
+            "9000 times its own weight. That is why propeller root failures are "
+            "so violent, and why cracked props must never be flown.",
+    graphs=[
+        Sweep(over="velocity", y_label="Centripetal force F_c [N]",
+              title="Force rises with the square of speed", hi_factor=1.6),
+    ],
+    checks=[
+        Check(lambda i, r: ("info",
+                            "That is %.0f times the mass's own weight. Rotating "
+                            "parts routinely see loads like this, which is why "
+                            "hub and root joints are sized by centripetal load "
+                            "rather than by aerodynamic load."
+                            % (r / (i.mass * G0)))
+              if i.mass > 0 and r / (i.mass * G0) > 1000.0 else None),
+    ],
+    related=["rotational_mechanics.angular_velocity_(rpm_to_rad/s)",
+             "rotational_mechanics.moment_of_inertia", "mech.force"],
+    keywords=("centripetal", "circular", "hub", "blade", "g-force", "rotor"),
+)
+
+
+ROTATIONAL_KE = Calculator(
+    slug="rotational_mechanics.rotational_kinetic_energy",
+    name="Rotational kinetic energy",
+    latex=r"KE_{rot} = \tfrac{1}{2}\,I\,\omega^{2}",
+    explanation=(
         "The rotating twin of 0.5 m v². Angular velocity is squared, so a "
         "flywheel or rotor at high RPM stores a surprising amount of energy - "
-        "which is exactly why a spinning rotor is dangerous even when small.",
-        p,
-    )
-    c1, c2 = st.columns(2)
-    with c1:
-        inertia = ui.number("Moment of inertia I", "kg·m²", f"{p}_i", 6.25e-5,
-                            min_value=0.0,
-                            help="Use the moment-of-inertia page to work this out.")
-    with c2:
-        rpm = ui.number("Rotational speed", "rpm", f"{p}_rpm", 8000.0)
-
-    omega = ui.compute(lambda: rpm_to_rad_s(rpm))
-    value = None if omega is None else ui.compute(
-        lambda: rotational_kinetic_energy(inertia, omega))
-    if value is not None:
-        ui.result(
-            "Rotational kinetic energy", value, "J",
-            secondary=[
-                ("Angular velocity", omega, "rad/s"),
-                ("Angular momentum", inertia * omega, "kg·m²/s"),
-                ("Braking torque to stop it in 0.5 s",
-                 inertia * omega / 0.5, "N·m"),
-                ("Energy at twice the speed", value * 4.0, "J"),
-            ],
-        )
-    ui.assumptions([
+        "which is exactly why a spinning rotor is dangerous even when small."
+    ),
+    inputs=[
+        Field("inertia", "Moment of inertia I", "kg·m²", 6.25e-5, min=0.0,
+              help="Use the moment-of-inertia page to work this out."),
+        Field("rpm", "Rotational speed", "rpm", 8000.0),
+    ],
+    compute=lambda i: rotational_kinetic_energy(i.inertia, rpm_to_rad_s(i.rpm)),
+    result=Output("Rotational kinetic energy", "J"),
+    secondary=[
+        Secondary("Angular velocity", "rad/s", lambda i, r: rpm_to_rad_s(i.rpm)),
+        Secondary("Angular momentum", "kg·m²/s",
+                  lambda i, r: i.inertia * rpm_to_rad_s(i.rpm)),
+        Secondary("Braking torque to stop it in 0.5 s", "N·m",
+                  lambda i, r: i.inertia * rpm_to_rad_s(i.rpm) / 0.5),
+        Secondary("Energy at twice the speed", "J", lambda i, r: r * 4.0),
+    ],
+    assumptions=[
         "I must be taken about the actual axis of rotation.",
         "Rigid body: no flexing, no mass moving relative to the body.",
         "This is rotational energy only. A wheel that is also travelling has "
         "translational kinetic energy on top of this.",
-        "The braking-torque figure assumes constant torque over the stopping time.",
-    ])
-    ui.reference(
-        variables=[
-            ("$KE_{rot}$", "Rotational kinetic energy", "J"),
-            ("$I$", "Moment of inertia", "kg·m²"),
-            ("$\\omega$", "Angular velocity", "rad/s"),
-        ],
-        example="Motor braking and flywheel storage. Stopping a spinning propeller "
-                "means dumping this energy somewhere - into the ESC as heat, or "
-                "back into the battery through regenerative braking. It is also "
-                "the figure behind flywheel energy-storage systems.",
-    )
+        "The braking-torque figure assumes constant torque over the stopping "
+        "time.",
+    ],
+    variables=[
+        ("$KE_{rot}$", "Rotational kinetic energy", "J"),
+        ("$I$", "Moment of inertia", "kg·m²"),
+        ("$\\omega$", "Angular velocity", "rad/s"),
+    ],
+    example="Motor braking and flywheel storage. Stopping a spinning propeller "
+            "means dumping this energy somewhere - into the ESC as heat, or "
+            "back into the battery through regenerative braking. It is also "
+            "the figure behind flywheel energy-storage systems.",
+    graphs=[
+        Sweep(over="rpm", y_label="Rotational kinetic energy [J]",
+              title="Energy rises with the square of speed", hi_factor=1.8),
+    ],
+    related=["rotational_mechanics.moment_of_inertia", "mech.kinetic_energy",
+             "rotational_mechanics.rotational_power"],
+    keywords=("flywheel", "rotor", "energy", "angular momentum", "braking"),
+)
 
 
-CALCULATORS = {
-    "Angular velocity (RPM to rad/s)": render_angular_velocity,
-    "Rotational power": render_rotational_power,
-    "Centripetal force": render_centripetal,
-    "Moment of inertia": render_moment_of_inertia,
-    "Rotational kinetic energy": render_rotational_ke,
-}
+MOMENT_OF_INERTIA = Calculator(
+    slug="rotational_mechanics.moment_of_inertia",
+    name="Moment of inertia",
+    latex="", explanation="",
+    render=render_moment_of_inertia,
+    keywords=("I", "inertia", "shapes", "flywheel", "disc", "rod", "sphere"),
+)
+
+
+CALCULATORS = [
+    ANGULAR_VELOCITY,
+    ROTATIONAL_POWER,
+    CENTRIPETAL_FORCE,
+    MOMENT_OF_INERTIA,
+    ROTATIONAL_KE,
+]

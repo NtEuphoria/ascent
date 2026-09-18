@@ -715,8 +715,7 @@ _STALL = Calculator(
                  "than most pilots expect.",
         ),
     ],
-    related=["aero.lift", "aero.wing_loading", "flight.turn", "flight.airspeed",
-             "flight.glide"],
+    related=["aero.lift", "aero.wing_loading", "flight.glide"],
     variables=[
         ("$V_{stall}$", "Stall speed (true airspeed)", "m/s"),
         ("$W$", "Weight", "N"),
@@ -882,7 +881,7 @@ _CLIMB = Calculator(
         ),
     ],
     related=["flight.twr", "flight.power_to_weight", "aero.drag",
-             "flight.glide", "flight.airspeed"],
+             "flight.glide"],
     variables=[
         ("$RC$", "Rate of climb (vertical speed)", "m/s"),
         ("$V$", "True airspeed along the flight path", "m/s"),
