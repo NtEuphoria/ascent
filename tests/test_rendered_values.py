@@ -87,6 +87,9 @@ BASELINES = {
         "Normal stress": ("63.66", "MPa"),
         "Strain": ("0.0012", "-"),
         "Young's modulus": ("69.85", "GPa"),
+        # Only baselined once the page became declarative: its result label
+        # used to carry the chosen strength basis, so it changed with a radio.
+        "Factor of safety": ("4.333", "-"),
         "Density": ("2,700", "kg/m³"),
         "Specific strength": ("102.2", "kN·m/kg"),
     },
