@@ -1,11 +1,9 @@
 """Control-systems calculators.
 
-Six pages that cover one loop end to end: the error that drives it
+Four pages that follow one loop through: the error that drives it
 (`ctrl.error`), the three terms that act on that error (`ctrl.pid`), the shape
-of the response they produce (`ctrl.second_order`), the offset proportional
-action alone leaves behind (`ctrl.steady_state_error`), a way to get starting
-gains (`ctrl.ziegler_nichols`), and what running it on a computer costs
-(`ctrl.sample_rate`).
+of the response they produce (`ctrl.second_order`), and a way to get starting
+gains (`ctrl.ziegler_nichols`).
 
 Where a plant model is needed it is a first-order lag (τ * dy/dt = K*u - y),
 the simplest model that still behaves like a real system: it has inertia, it
@@ -280,57 +278,6 @@ def gain_for_offset(error_fraction: float, plant_gain: float) -> float:
 # ---------------------------------------------------------------------------
 # Pages
 # ---------------------------------------------------------------------------
-
-
-def render_error() -> None:
-    p = "ctrl_err"
-    ui.page_header(
-        "Control error",
-        r"e(t) = r(t) - y(t)",
-        "The starting point of every feedback loop: the difference between where "
-        "you want to be and where you are. Everything a controller does is a "
-        "response to this one number.",
-        p,
-    )
-    c1, c2 = st.columns(2)
-    with c1:
-        setpoint = ui.number("Setpoint r (target)", "units", f"{p}_sp", 100.0)
-    with c2:
-        measured = ui.number("Measured value y", "units", f"{p}_pv", 92.0)
-
-    value = ui.compute(lambda: control_error(setpoint, measured))
-    if value is not None:
-        ui.result(
-            "Error e", value, "units",
-            secondary=[
-                ("Absolute error", abs(value), "units"),
-                ("As a percentage of the setpoint",
-                 abs(value) / abs(setpoint) * 100.0 if setpoint != 0
-                 else float("nan"), "%"),
-                ("Proportional action at Kp = 2", 2.0 * value, "output units"),
-            ],
-        )
-        st.caption("Positive error: the measurement is below the setpoint, so the "
-                   "controller must push harder." if value > 0 else
-                   "Negative error: the measurement has overshot the setpoint."
-                   if value < 0 else "On target.")
-    ui.assumptions([
-        "Sign convention: error = setpoint minus measurement. The opposite "
-        "convention exists and flips the sign of every gain - be consistent.",
-        "The measurement is assumed accurate. Sensor bias, noise and lag all "
-        "corrupt the error a real controller sees.",
-        "Setpoint and measurement must be in the same units.",
-    ])
-    ui.reference(
-        variables=[
-            ("$e(t)$", "Control error", "process units"),
-            ("$r(t)$", "Setpoint (reference)", "process units"),
-            ("$y(t)$", "Measured process value", "process units"),
-        ],
-        example="Drone altitude hold. Commanded 100 m, barometer reads 92 m, "
-                "so the error is +8 m and the controller increases thrust. The "
-                "same error drives the integral and derivative terms too.",
-    )
 
 
 def render_pid() -> None:
@@ -718,8 +665,58 @@ _PID = Calculator(
 )
 
 _ERROR = Calculator(
-    slug="ctrl.error", name="Control error", latex="", explanation="",
-    render=render_error,
+    slug="ctrl.error",
+    name="Control error",
+    latex=r"e(t) = r(t) - y(t)",
+    explanation=(
+        "The starting point of every feedback loop: the difference between "
+        "where you want to be and where you are. Everything a controller does "
+        "is a response to this one number."
+    ),
+    inputs=[
+        Field("setpoint", "Setpoint r (target)", "units", 100.0),
+        Field("measured", "Measured value y", "units", 92.0),
+    ],
+    compute=lambda i: control_error(i.setpoint, i.measured),
+    result=Output("Error e", "units"),
+    secondary=[
+        Secondary("Absolute error", "units", lambda i, r: abs(r)),
+        Secondary("As a percentage of the setpoint", "%",
+                  lambda i, r: abs(r) / abs(i.setpoint) * 100.0),
+        Secondary("Proportional action at Kp = 2", "output units",
+                  lambda i, r: 2.0 * r),
+    ],
+    note=lambda i, r: (
+        "Positive error: the measurement is below the setpoint, so the "
+        "controller must push harder." if r > 0 else
+        "Negative error: the measurement has overshot the setpoint." if r < 0
+        else "On target."),
+    assumptions=[
+        "Sign convention: error = setpoint minus measurement. The opposite "
+        "convention exists and flips the sign of every gain - be consistent.",
+        "The measurement is assumed accurate. Sensor bias, noise and lag all "
+        "corrupt the error a real controller sees.",
+        "Setpoint and measurement must be in the same units.",
+        "The influence table shows both inputs with large opposing "
+        "elasticities, and that is not a glitch: the error is a small "
+        "difference between two big numbers, so a 1% shift in either moves it "
+        "enormously. That is exactly why a noisy sensor produces a noisy error "
+        "signal, and why the derivative term is the one that suffers first.",
+    ],
+    variables=[
+        ("$e(t)$", "Control error", "process units"),
+        ("$r(t)$", "Setpoint (reference)", "process units"),
+        ("$y(t)$", "Measured process value", "process units"),
+    ],
+    example="Drone altitude hold. Commanded 100 m, barometer reads 92 m, "
+            "so the error is +8 m and the controller increases thrust. The "
+            "same error drives the integral and derivative terms too.",
+    graphs=[
+        Sweep(over="measured", y_label="Error e [units]",
+              title="Error as the measurement approaches the setpoint",
+              lo_factor=0.5, hi_factor=1.5),
+    ],
+    related=["ctrl.pid", "ctrl.second_order", "ctrl.ziegler_nichols"],
     keywords=("error", "setpoint", "measured", "feedback"),
 )
 

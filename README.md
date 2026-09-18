@@ -127,7 +127,7 @@ Run the tests:
 .venv/bin/pip install pytest && .venv/bin/python -m pytest tests/ -q
 ```
 
-712 tests: hand-worked known values for every equation, rejection tests for bad
+751 tests: hand-worked known values for every equation, rejection tests for bad
 inputs, headless renders of every page, end-to-end checks that each page's
 headline number is what it should be, contrast measured programmatically in
 every theme, and the stream parser exercised over a real pseudo-terminal.
@@ -386,9 +386,11 @@ These are deliberate, and worth keeping if you extend the app:
 
 - The calculators still outstanding from the v1.1 plan: drag polar, airspeed
   and density altitude, turn performance.
-- Converting the last modules to declarative specs (50 of 85 are converted;
-  the rest keep full control through a `render=` escape hatch, which some of
-  them genuinely need).
+- No plain equation is left on the imperative path: 61 of 85 pages are
+  declarative specs, and the 24 that are not each have a structural reason -
+  guided studios, the moment-of-inertia shape picker, Ohm's law switching which
+  quantity is the headline, resistor networks taking a variable-length list,
+  the PID simulation, live streaming, and the conversion and lookup tables.
 - **Windows and Linux builds.** The calculators are pure Python and already
   run anywhere Streamlit does; only the native window needs porting.
 - **Notarisation.** Until then Gatekeeper blocks the app on first open and
