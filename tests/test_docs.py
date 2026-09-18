@@ -225,3 +225,18 @@ def test_cross_links_are_not_repeated():
                 repeats.append((calc.slug, target))
             seen.add(target)
     assert not repeats, "duplicated related= targets: %s" % repeats
+
+
+def test_the_structure_tree_does_not_claim_unbuilt_features():
+    """The tree described navigate.py as handling "deep links". It stages an
+    in-app jump in session state; st.query_params appears nowhere in the app,
+    so there is no URL to deep link with. A one-word description is still a
+    claim."""
+    tree = README[README.index("ascent/\n"):]
+    tree = tree[:tree.index("```")]
+    if "deep link" in tree.lower():
+        sources = "\n".join(
+            path.read_text(encoding="utf-8")
+            for path in (ROOT / "utils").glob("*.py"))
+        assert "query_params" in sources, (
+            "the structure tree promises deep links; nothing reads a URL parameter")

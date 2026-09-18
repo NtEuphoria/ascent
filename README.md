@@ -237,7 +237,7 @@ ascent/
 │   ├── update.py           # Asks GitHub once a day if there is a newer build
 │   ├── charts.py           # Interactive Altair charts
 │   ├── palette.py          # Command palette search and ranking
-│   ├── navigate.py         # Deep links and section switching
+│   ├── navigate.py         # In-app jumps between pages and sections
 │   ├── settings.py         # User preferences, persisted as JSON
 │   ├── constants.py        # g, rho_0, p_0, ... each with a source note
 │   ├── validation.py       # ValidationError + positive/non_zero/in_range...
